@@ -231,23 +231,41 @@ def scrape_arcelik(url, soup):
             except:
                 continue
     
-    # Resim
+    # Resim - Arçelik özel format
     img_selectors = [
-        '.product-gallery img', '.pdp-gallery img', 
+        '.product-gallery img', '.pdp-gallery img',
         '.product-image img', 'img.product-img',
         '.slick-slide img', '.carousel-item img',
         '.gallery-thumbs img', '.pdp-image img',
-        'img[src*="arcelik"]'
+        'img[src*="arcelik"]', 'img[data-src*="media"]'
     ]
     for sel in img_selectors:
         img = soup.select_one(sel)
         if img:
-            src = img.get('src') or img.get('data-src') or img.get('data-lazy')
+            # Arçelik resimleri için öncelik sırası: data-src > src
+            src = img.get('data-src') or img.get('data-lazy') or img.get('src')
             if src and 'placeholder' not in src.lower():
+                # Protokol düzeltmeleri
                 if src.startswith('//'):
                     src = 'https:' + src
                 elif src.startswith('/'):
                     src = 'https://www.arcelik.com.tr' + src
+
+                # Arçelik resim optimizasyonu - 1000x1000 boyut
+                if 'arcelik.com.tr/media/' in src or src.startswith('https://www.arcelik.com.tr/media/'):
+                    # Eğer resize parametresi yoksa ekle
+                    if '/resize/' not in src and '.png' in src:
+                        src = src.replace('/media/', '/media/resize/')
+                        # Dosya adından sonra boyut ekle
+                        src = src.replace('.png', '.png/1000Wx1000H/image.webp')
+                    elif '/resize/' not in src and '.jpg' in src:
+                        src = src.replace('/media/', '/media/resize/')
+                        src = src.replace('.jpg', '.jpg/1000Wx1000H/image.webp')
+                    elif '/resize/' not in src and '.webp' in src:
+                        src = src.replace('/media/', '/media/resize/')
+                        if '/1000Wx1000H/' not in src:
+                            src = src.replace('.webp', '/1000Wx1000H/image.webp')
+
                 data['resim_url'] = src
                 break
     
@@ -663,19 +681,23 @@ def index():
 def get_urunler():
     """Tüm ürünleri getir (filtreli)"""
     conn = get_db_connection()
-    
+
     # Filtre parametreleri
     kategori = request.args.get('kategori', '')
+    alt_kategori = request.args.get('alt_kategori', '')
     oda = request.args.get('oda', '')
     statu = request.args.get('statu', '')
     arama = request.args.get('arama', '')
-    
+
     query = 'SELECT * FROM urunler WHERE 1=1'
     params = []
-    
+
     if kategori:
         query += ' AND kategori = ?'
         params.append(kategori)
+    if alt_kategori:
+        query += ' AND alt_kategori = ?'
+        params.append(alt_kategori)
     if oda:
         query += ' AND oda = ?'
         params.append(oda)
@@ -683,14 +705,15 @@ def get_urunler():
         query += ' AND statu = ?'
         params.append(statu)
     if arama:
-        query += ' AND (urun_adi LIKE ? OR marka LIKE ?)'
+        # Türkçe karakterlere duyarlı olmayan arama için COLLATE NOCASE
+        query += ' AND (LOWER(urun_adi) LIKE LOWER(?) OR LOWER(marka) LIKE LOWER(?))'
         params.extend([f'%{arama}%', f'%{arama}%'])
-    
+
     query += ' ORDER BY created_at DESC'
-    
+
     urunler = conn.execute(query, params).fetchall()
     conn.close()
-    
+
     return jsonify([dict(u) for u in urunler])
 
 @app.route('/api/urunler', methods=['POST'])
@@ -872,6 +895,7 @@ def scrape_url():
                 'link': scraped.get('link', url),
                 'kategori_tahmini': scraped.get('kategori_tahmini', ''),
                 'alt_kategori_tahmini': scraped.get('alt_kategori_tahmini', ''),
+                'oda_tahmini': scraped.get('oda_tahmini', ''),
                 'teknik_ozellikler': scraped.get('specs', {})
             }
         })
@@ -939,15 +963,166 @@ def update_butce():
 
 @app.route('/api/export/excel', methods=['GET'])
 def export_excel():
-    """Excel olarak dışa aktar"""
+    """Excel olarak dışa aktar - Tüm Ürünler"""
     conn = get_db_connection()
     urunler = conn.execute('SELECT * FROM urunler ORDER BY kategori, oda').fetchall()
     conn.close()
-    
+
+    # Tüm teknik özellikleri topla (hangi alanların kullanıldığını öğrenmek için)
+    all_spec_keys = set()
+    for u in urunler:
+        if u['teknik_ozellikler']:
+            teknik = json.loads(u['teknik_ozellikler'])
+            all_spec_keys.update(teknik.keys())
+
+    # Ortak teknik alanlar için güzel isimler
+    spec_name_mapping = {
+        'enerji_sinifi': 'Enerji Sınıfı',
+        'kapasite_kg': 'Kapasite (kg)',
+        'devir_sayisi': 'Devir/dk',
+        'su_tuketimi_lt': 'Su Tüketimi (lt)',
+        'yillik_su_tuketimi_lt': 'Yıllık Su Tüketimi (lt)',
+        'gurultu_db': 'Gürültü (dB)',
+        'gurultu_yikama_db': 'Yıkama Gürültüsü (dB)',
+        'gurultu_sikma_db': 'Sıkma Gürültüsü (dB)',
+        'yikama_programlari': 'Program Sayısı',
+        'garanti_suresi': 'Garanti Süresi',
+        'olculer': 'Ölçüler',
+        'kapasite_kisilik': 'Kapasite (kişilik)',
+        'kurutma_sinifi': 'Kurutma Sınıfı',
+        'brut_hacim_lt': 'Brüt Hacim (lt)',
+        'net_hacim_lt': 'Net Hacim (lt)',
+        'sogutma_tipi': 'Soğutma Tipi',
+        'dondurucu_hacim_lt': 'Dondurucu Hacim (lt)',
+        'yillik_enerji_tuketimi_kwh': 'Yıllık Enerji Tük. (kWh)',
+        'malzeme': 'Malzeme',
+        'kumas_tipi': 'Kumaş Tipi',
+        'renk': 'Renk',
+        'kisi_kapasitesi': 'Kişi Kapasitesi',
+        'agirlik_kg': 'Ağırlık (kg)',
+        'olculer_3lu': '3\'lü Koltuk Ölçüleri',
+        'olculer_2li': '2\'li Koltuk Ölçüleri',
+        'olculer_berjer': 'Berjer Ölçüleri',
+        'ekran_boyutu': 'Ekran Boyutu',
+        'cozunurluk': 'Çözünürlük'
+    }
+
     # DataFrame oluştur
     data = []
     for u in urunler:
         teknik = json.loads(u['teknik_ozellikler']) if u['teknik_ozellikler'] else {}
+
+        # Önce temel bilgiler (kullanıcı için okunabilir sütunlar)
+        row = {
+            'ID': u['id'],
+            'Ürün Adı': u['urun_adi'],
+            'Marka': u['marka'],
+            'Fiyat (TL)': u['fiyat'],
+            'Statü': u['statu'],
+            'Kategori': u['kategori'],
+            'Alt Kategori': u['alt_kategori'] if 'alt_kategori' in u.keys() else '',
+            'Oda': u['oda'],
+            'Öncelik': u['oncelik'],
+            'Notlar': u['notlar'],
+        }
+
+        # Sonra teknik özellikler (her biri ayrı sütun)
+        for spec_key in sorted(all_spec_keys):
+            nice_name = spec_name_mapping.get(spec_key, spec_key.replace('_', ' ').title())
+            row[nice_name] = teknik.get(spec_key, '')
+
+        # En sona link ve resim URL
+        row['Link'] = u['link']
+        row['Resim URL'] = u['resim_url']
+        row['Eklenme Tarihi'] = u['created_at']
+
+        data.append(row)
+
+    df = pd.DataFrame(data)
+
+    # Excel dosyası oluştur
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Tüm Ürünler', index=False)
+
+        # Sütun genişliklerini ayarla
+        worksheet = writer.sheets['Tüm Ürünler']
+        for idx, col in enumerate(df.columns):
+            max_length = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            # Excel sütun harfi hesapla
+            if idx < 26:
+                col_letter = chr(65 + idx)
+            else:
+                col_letter = chr(64 + idx // 26) + chr(65 + idx % 26)
+            worksheet.column_dimensions[col_letter].width = min(max_length, 50)
+
+    output.seek(0)
+
+    filename = f'ev_esyalari_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+@app.route('/api/export/excel/alinanlar', methods=['GET'])
+def export_excel_alinanlar():
+    """Excel olarak dışa aktar - Sadece Alınan Ürünler"""
+    conn = get_db_connection()
+    urunler = conn.execute('SELECT * FROM urunler WHERE statu = "Alındı" ORDER BY kategori, oda').fetchall()
+    conn.close()
+
+    if len(urunler) == 0:
+        return jsonify({'success': False, 'error': 'Henüz alınan ürün bulunmuyor'}), 404
+
+    # Toplam harcama hesapla
+    toplam_harcama = sum([u['fiyat'] or 0 for u in urunler])
+
+    # Tüm teknik özellikleri topla
+    all_spec_keys = set()
+    for u in urunler:
+        if u['teknik_ozellikler']:
+            teknik = json.loads(u['teknik_ozellikler'])
+            all_spec_keys.update(teknik.keys())
+
+    # Ortak teknik alanlar için güzel isimler
+    spec_name_mapping = {
+        'enerji_sinifi': 'Enerji Sınıfı',
+        'kapasite_kg': 'Kapasite (kg)',
+        'devir_sayisi': 'Devir/dk',
+        'su_tuketimi_lt': 'Su Tüketimi (lt)',
+        'yillik_su_tuketimi_lt': 'Yıllık Su Tüketimi (lt)',
+        'gurultu_db': 'Gürültü (dB)',
+        'gurultu_yikama_db': 'Yıkama Gürültüsü (dB)',
+        'gurultu_sikma_db': 'Sıkma Gürültüsü (dB)',
+        'yikama_programlari': 'Program Sayısı',
+        'garanti_suresi': 'Garanti Süresi',
+        'olculer': 'Ölçüler',
+        'kapasite_kisilik': 'Kapasite (kişilik)',
+        'kurutma_sinifi': 'Kurutma Sınıfı',
+        'brut_hacim_lt': 'Brüt Hacim (lt)',
+        'net_hacim_lt': 'Net Hacim (lt)',
+        'sogutma_tipi': 'Soğutma Tipi',
+        'dondurucu_hacim_lt': 'Dondurucu Hacim (lt)',
+        'yillik_enerji_tuketimi_kwh': 'Yıllık Enerji Tük. (kWh)',
+        'malzeme': 'Malzeme',
+        'kumas_tipi': 'Kumaş Tipi',
+        'renk': 'Renk',
+        'kisi_kapasitesi': 'Kişi Kapasitesi',
+        'agirlik_kg': 'Ağırlık (kg)',
+        'olculer_3lu': '3\'lü Koltuk Ölçüleri',
+        'olculer_2li': '2\'li Koltuk Ölçüleri',
+        'olculer_berjer': 'Berjer Ölçüleri',
+        'ekran_boyutu': 'Ekran Boyutu',
+        'cozunurluk': 'Çözünürlük'
+    }
+
+    # DataFrame oluştur
+    data = []
+    for u in urunler:
+        teknik = json.loads(u['teknik_ozellikler']) if u['teknik_ozellikler'] else {}
+
         row = {
             'ID': u['id'],
             'Ürün Adı': u['urun_adi'],
@@ -956,35 +1131,56 @@ def export_excel():
             'Kategori': u['kategori'],
             'Alt Kategori': u['alt_kategori'] if 'alt_kategori' in u.keys() else '',
             'Oda': u['oda'],
-            'Statü': u['statu'],
             'Öncelik': u['oncelik'],
-            'Link': u['link'],
             'Notlar': u['notlar'],
-            'Eklenme Tarihi': u['created_at']
         }
-        # Teknik özellikleri ekle
-        for k, v in teknik.items():
-            nice_key = k.replace('_', ' ').title()
-            row[nice_key] = v
+
+        # Teknik özellikler
+        for spec_key in sorted(all_spec_keys):
+            nice_name = spec_name_mapping.get(spec_key, spec_key.replace('_', ' ').title())
+            row[nice_name] = teknik.get(spec_key, '')
+
+        # Link ve resim URL
+        row['Link'] = u['link']
+        row['Resim URL'] = u['resim_url']
+        row['Eklenme Tarihi'] = u['created_at']
+
         data.append(row)
-    
+
     df = pd.DataFrame(data)
-    
+
     # Excel dosyası oluştur
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='Ev Eşyaları', index=False)
-        
-        # Sütun genişliklerini ayarla
-        worksheet = writer.sheets['Ev Eşyaları']
+        # Alınan ürünler sheet
+        df.to_excel(writer, sheet_name='Alınan Ürünler', index=False)
+
+        # Özet sheet
+        ozet_data = {
+            'Bilgi': ['Toplam Ürün Sayısı', 'Toplam Harcama (TL)', 'Ortalama Ürün Fiyatı (TL)'],
+            'Değer': [len(urunler), toplam_harcama, toplam_harcama / len(urunler) if len(urunler) > 0 else 0]
+        }
+        df_ozet = pd.DataFrame(ozet_data)
+        df_ozet.to_excel(writer, sheet_name='Özet', index=False)
+
+        # Sütun genişliklerini ayarla - Alınan Ürünler
+        worksheet = writer.sheets['Alınan Ürünler']
         for idx, col in enumerate(df.columns):
             max_length = max(df[col].astype(str).map(len).max(), len(col)) + 2
-            col_letter = chr(65 + idx) if idx < 26 else chr(64 + idx // 26) + chr(65 + idx % 26)
+            if idx < 26:
+                col_letter = chr(65 + idx)
+            else:
+                col_letter = chr(64 + idx // 26) + chr(65 + idx % 26)
             worksheet.column_dimensions[col_letter].width = min(max_length, 50)
-    
+
+        # Sütun genişliklerini ayarla - Özet
+        worksheet_ozet = writer.sheets['Özet']
+        worksheet_ozet.column_dimensions['A'].width = 30
+        worksheet_ozet.column_dimensions['B'].width = 20
+
     output.seek(0)
-    
-    filename = f'ev_esyalari_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+
+    filename = f'alinan_urunler_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

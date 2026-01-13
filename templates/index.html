@@ -31,11 +31,15 @@
     <style>
         [v-cloak] { display: none; }
         body { background: linear-gradient(135deg, #FDF8F3 0%, #FFF5F5 50%, #F4F7F4 100%); min-height: 100vh; }
-        .masonry-grid { column-count: 1; column-gap: 1.5rem; }
-        @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
-        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
-        @media (min-width: 1280px) { .masonry-grid { column-count: 4; } }
-        .masonry-item { break-inside: avoid; margin-bottom: 1.5rem; }
+        /* Mobilde 2'li grid, büyük ekranlarda masonry */
+        .masonry-grid { column-count: 2; column-gap: 0.75rem; }
+        @media (min-width: 640px) { .masonry-grid { column-gap: 1rem; } }
+        @media (min-width: 768px) { .masonry-grid { column-count: 2; column-gap: 1.25rem; } }
+        @media (min-width: 1024px) { .masonry-grid { column-count: 3; column-gap: 1.5rem; } }
+        @media (min-width: 1280px) { .masonry-grid { column-count: 4; column-gap: 1.5rem; } }
+        .masonry-item { break-inside: avoid; margin-bottom: 0.75rem; }
+        @media (min-width: 640px) { .masonry-item { margin-bottom: 1rem; } }
+        @media (min-width: 1024px) { .masonry-item { margin-bottom: 1.5rem; } }
         .card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.6); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .card:hover { transform: translateY(-4px); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); }
         .modal-backdrop { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(8px); }
@@ -82,10 +86,16 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button @click="exportExcel" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sage-100 text-sage-600 hover:bg-sage-200 transition-all text-sm font-medium">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                            <span class="hidden sm:inline">Excel</span>
-                        </button>
+                        <div class="relative group">
+                            <button @click="exportExcel" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sage-100 text-sage-600 hover:bg-sage-200 transition-all text-sm font-medium">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                <span class="hidden sm:inline">Excel</span>
+                            </button>
+                            <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <button @click="exportExcel" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">📋 Tüm Ürünler</button>
+                                <button @click="exportExcelAlinanlar" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">✅ Alınan Ürünler</button>
+                            </div>
+                        </div>
                         <button @click="showDashboard = true" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-100 text-amber-600 hover:bg-amber-200 transition-all text-sm font-medium">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                             <span class="hidden sm:inline">Dashboard</span>
@@ -98,9 +108,13 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-rose-50">
                     <span class="text-xs font-medium text-slate-500 mr-2">Filtreler:</span>
-                    <select v-model="aktifFiltre.kategori" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
+                    <select v-model="aktifFiltre.kategori" @change="onKategoriFilterChange" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
                         <option value="">Tüm Kategoriler</option>
                         <option v-for="k in kategoriler" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                    <select v-if="mevcutAltKategorilerFiltre.length > 0" v-model="aktifFiltre.alt_kategori" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
+                        <option value="">Tüm Alt Kategoriler</option>
+                        <option v-for="ak in mevcutAltKategorilerFiltre" :key="ak" :value="ak">{{ ak }}</option>
                     </select>
                     <select v-model="aktifFiltre.oda" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
                         <option value="">Tüm Odalar</option>
@@ -135,22 +149,23 @@
             <!-- Product Grid -->
             <div v-if="filteredUrunler.length > 0" class="masonry-grid">
                 <div v-for="urun in filteredUrunler" :key="urun.id" class="masonry-item animate-fadeIn">
-                    <div class="card rounded-2xl overflow-hidden shadow-lg">
+                    <div class="card rounded-2xl overflow-hidden shadow-lg" :class="{'ring-4 ring-green-500 bg-green-50/30': urun.secili}">
                         <div class="relative group">
-                            <div class="aspect-[4/3] bg-gradient-to-br from-rose-50 to-sage-50 overflow-hidden">
+                            <div class="aspect-square sm:aspect-[4/3] bg-gradient-to-br from-rose-50 to-sage-50 overflow-hidden">
                                 <img v-if="urun.resim_url" :src="urun.resim_url" :alt="urun.urun_adi" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" @error="$event.target.style.display='none'">
                                 <div v-else class="w-full h-full flex items-center justify-center">
-                                    <svg class="w-16 h-16 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                    <svg class="w-12 h-12 sm:w-16 sm:h-16 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                 </div>
                             </div>
-                            <div class="absolute top-3 left-3">
-                                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm cursor-pointer hover:bg-white transition-all">
+                            <div class="absolute top-2 left-2 sm:top-3 sm:left-3">
+                                <label class="flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm cursor-pointer hover:bg-white transition-all">
                                     <input type="checkbox" v-model="urun.secili" @change="hesaplaSeciliToplam" class="custom-checkbox">
-                                    <span class="text-xs font-medium text-slate-600">Hesaba Kat</span>
+                                    <span class="text-xs font-medium text-slate-600 hidden sm:inline">Hesaba Kat</span>
+                                    <span class="text-xs font-medium text-slate-600 sm:hidden">✓</span>
                                 </label>
                             </div>
-                            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm">
-                                <span class="font-display font-semibold text-slate-800">{{ formatPrice(urun.fiyat) }} ₺</span>
+                            <div class="absolute top-2 right-2 sm:top-3 sm:right-3 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm">
+                                <span class="font-display font-semibold text-xs sm:text-sm text-slate-800">{{ formatPrice(urun.fiyat) }} ₺</span>
                             </div>
                             <div class="absolute bottom-3 left-3">
                                 <span :class="urun.statu === 'Alındı' ? 'status-alindi' : 'status-arastiriliyor'" class="px-3 py-1 rounded-full text-xs font-medium">
@@ -163,22 +178,27 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="p-4">
+                        <div class="p-3 sm:p-4">
                             <div class="flex items-start justify-between gap-2 mb-2">
                                 <div class="flex-1 min-w-0">
-                                    <h3 class="font-display font-medium text-slate-800 truncate">{{ urun.urun_adi }}</h3>
-                                    <p v-if="urun.marka" class="text-sm text-slate-500">{{ urun.marka }}</p>
+                                    <h3 class="font-display font-medium text-sm sm:text-base text-slate-800 line-clamp-2">{{ urun.urun_adi }}</h3>
+                                    <p v-if="urun.marka" class="text-xs sm:text-sm text-slate-500">{{ urun.marka }}</p>
                                 </div>
-                                <span :class="getPriorityClass(urun.oncelik)" class="px-2 py-0.5 rounded-md text-xs font-medium shrink-0">{{ urun.oncelik }}</span>
+                                <span :class="getPriorityClass(urun.oncelik)" class="px-1.5 py-0.5 sm:px-2 rounded-md text-xs font-medium shrink-0">{{ urun.oncelik }}</span>
                             </div>
-                            <div class="flex items-center gap-2 text-xs text-slate-500 mb-3 flex-wrap">
-                                <span class="px-2 py-0.5 rounded bg-slate-100">{{ urun.kategori }}</span>
-                                <span v-if="urun.alt_kategori && urun.alt_kategori !== 'Genel'" class="px-2 py-0.5 rounded bg-rose-50 text-rose-600">{{ urun.alt_kategori }}</span>
-                                <span class="px-2 py-0.5 rounded bg-slate-100">{{ urun.oda }}</span>
+                            <div class="flex items-center gap-1.5 sm:gap-2 text-xs text-slate-500 mb-2 sm:mb-3 flex-wrap">
+                                <span class="px-1.5 py-0.5 sm:px-2 rounded bg-slate-100">{{ urun.kategori }}</span>
+                                <span v-if="urun.alt_kategori && urun.alt_kategori !== 'Genel'" class="px-1.5 py-0.5 sm:px-2 rounded bg-rose-50 text-rose-600">{{ urun.alt_kategori }}</span>
+                                <span class="px-1.5 py-0.5 sm:px-2 rounded bg-slate-100">{{ urun.oda }}</span>
                             </div>
-                            
+
+                            <!-- Not Önizlemesi -->
+                            <div v-if="urun.notlar" class="mb-2 sm:mb-3 p-2 rounded-lg bg-amber-50/50 border border-amber-100/50">
+                                <p class="text-xs text-slate-600 line-clamp-2">💭 {{ urun.notlar }}</p>
+                            </div>
+
                             <!-- Teknik Özellikler Özeti -->
-                            <div v-if="parseTeknik(urun.teknik_ozellikler)" class="mb-3 p-2 rounded-lg bg-slate-50 text-xs">
+                            <div v-if="parseTeknik(urun.teknik_ozellikler)" class="mb-2 sm:mb-3 p-2 rounded-lg bg-slate-50 text-xs hidden sm:block">
                                 <div class="grid grid-cols-2 gap-1">
                                     <div v-for="(val, key) in getTopSpecs(urun.teknik_ozellikler)" :key="key" class="flex justify-between">
                                         <span class="text-slate-500">{{ formatSpecName(key) }}:</span>
@@ -186,9 +206,9 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            <a v-if="urun.link" :href="urun.link" target="_blank" class="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 mb-3 truncate">
-                                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+
+                            <a v-if="urun.link" :href="urun.link" target="_blank" class="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 mb-2 sm:mb-3 truncate">
+                                <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                 <span class="truncate">{{ getDomain(urun.link) }}</span>
                             </a>
                             <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
@@ -523,7 +543,7 @@
                 const scrapeSuccess = ref(false);
                 const scrapedSpecs = ref({});
                 
-                const aktifFiltre = ref({ kategori: '', oda: '', statu: '' });
+                const aktifFiltre = ref({ kategori: '', alt_kategori: '', oda: '', statu: '' });
                 const aramaMetni = ref('');
                 
                 const dashboard = ref({
@@ -539,12 +559,17 @@
                 const seciliToplam = ref(0);
                 
                 const seciliUrunSayisi = computed(() => urunler.value.filter(u => u.secili).length);
-                const hasActiveFilters = computed(() => aktifFiltre.value.kategori || aktifFiltre.value.oda || aktifFiltre.value.statu || aramaMetni.value);
+                const hasActiveFilters = computed(() => aktifFiltre.value.kategori || aktifFiltre.value.alt_kategori || aktifFiltre.value.oda || aktifFiltre.value.statu || aramaMetni.value);
                 const butceYuzdesi = computed(() => dashboard.value.toplam_butce === 0 ? 0 : Math.round((dashboard.value.harcanan_tutar / dashboard.value.toplam_butce) * 100));
-                
+
                 const mevcutAltKategoriler = computed(() => {
                     const kat = formData.value.kategori;
                     return altKategoriler.value[kat] || ['Genel'];
+                });
+
+                const mevcutAltKategorilerFiltre = computed(() => {
+                    const kat = aktifFiltre.value.kategori;
+                    return kat ? (altKategoriler.value[kat] || []) : [];
                 });
                 
                 const dinamikAlanlar = computed(() => {
@@ -632,6 +657,7 @@
                     try {
                         const params = new URLSearchParams();
                         if (aktifFiltre.value.kategori) params.append('kategori', aktifFiltre.value.kategori);
+                        if (aktifFiltre.value.alt_kategori) params.append('alt_kategori', aktifFiltre.value.alt_kategori);
                         if (aktifFiltre.value.oda) params.append('oda', aktifFiltre.value.oda);
                         if (aktifFiltre.value.statu) params.append('statu', aktifFiltre.value.statu);
                         if (aramaMetni.value) params.append('arama', aramaMetni.value);
@@ -651,7 +677,8 @@
                 };
                 
                 const filtrele = () => fetchUrunler();
-                const resetFilters = () => { aktifFiltre.value = { kategori: '', oda: '', statu: '' }; aramaMetni.value = ''; fetchUrunler(); };
+                const onKategoriFilterChange = () => { aktifFiltre.value.alt_kategori = ''; filtrele(); };
+                const resetFilters = () => { aktifFiltre.value = { kategori: '', alt_kategori: '', oda: '', statu: '' }; aramaMetni.value = ''; fetchUrunler(); };
                 const hesaplaSeciliToplam = () => { seciliToplam.value = urunler.value.filter(u => u.secili).reduce((sum, u) => sum + (parseFloat(u.fiyat) || 0), 0); };
                 const temizleSecim = () => { urunler.value.forEach(u => u.secili = false); seciliToplam.value = 0; };
                 
@@ -705,7 +732,7 @@
                             formData.value.fiyat = result.data.fiyat || 0;
                             formData.value.resim_url = result.data.resim_url || '';
                             formData.value.link = result.data.link || scrapeUrl.value;
-                            
+
                             // Kategori tahmini varsa uygula
                             if (result.data.kategori_tahmini) {
                                 formData.value.kategori = result.data.kategori_tahmini;
@@ -716,7 +743,12 @@
                                     }, 100);
                                 }
                             }
-                            
+
+                            // Oda tahmini varsa uygula
+                            if (result.data.oda_tahmini) {
+                                formData.value.oda = result.data.oda_tahmini;
+                            }
+
                             if (result.data.teknik_ozellikler) {
                                 scrapedSpecs.value = result.data.teknik_ozellikler;
                                 Object.assign(formData.value, result.data.teknik_ozellikler);
@@ -785,18 +817,19 @@
                 };
                 
                 const exportExcel = () => { window.location.href = '/api/export/excel'; };
-                
+                const exportExcelAlinanlar = () => { window.location.href = '/api/export/excel/alinanlar'; };
+
                 onMounted(() => { fetchUrunler(); fetchDashboard(); });
                 
                 return {
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
                     showModal, showDashboard, showDeleteConfirm, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
                     aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi,
-                    hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, butceYuzdesi,
+                    hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
-                    fetchUrunler, fetchDashboard, filtrele, resetFilters, hesaplaSeciliToplam, temizleSecim,
+                    fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
                     openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange,
-                    scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel
+                    scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar
                 };
             }
         }).mount('#app');

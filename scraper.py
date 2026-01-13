@@ -438,17 +438,33 @@ def extract_with_regex(soup, existing_specs=None):
         if match:
             specs['gurultu_db'] = f"{match.group(1)} dB"
     
-    # Çözünürlük
+    # Çözünürlük - SADECE TV/Monitör/Ekran ürünlerinde ara
     if 'cozunurluk' not in specs:
-        match = re.search(REGEX_PATTERNS['cozunurluk_alt'], text, re.IGNORECASE)
-        if match:
-            specs['cozunurluk'] = match.group(1).upper()
-        else:
-            match = re.search(REGEX_PATTERNS['cozunurluk'], text)
-            if match:
-                w, h = match.groups()
-                if int(w) > 500 and int(h) > 500:  # Gerçek çözünürlük olması için
-                    specs['cozunurluk'] = f"{w}x{h}"
+        # Önce ürünün TV/Monitör/Ekran olup olmadığını kontrol et
+        is_display_product = any(keyword in text for keyword in [
+            'televizyon', 'tv', 'led tv', 'smart tv', 'monitör', 'monitor',
+            'ekran', 'display', 'oled', 'qled', 'lcd'
+        ])
+
+        if is_display_product:
+            # Context-aware arama: çözünürlük kelimesinin yakınında ara
+            context_patterns = [
+                r'(?:ekran|çözünürlük|resolution|panel)[\s\w]{0,30}?(4K|8K|FHD|Full\s*HD|UHD|QHD|2K)',
+                r'(4K|8K|FHD|Full\s*HD|UHD|QHD|2K)[\s\w]{0,30}?(?:ekran|çözünürlük|resolution|panel)',
+            ]
+            for pattern in context_patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    specs['cozunurluk'] = match.group(1).upper()
+                    break
+
+            # Piksel çözünürlüğü de TV/Monitör için ara
+            if 'cozunurluk' not in specs:
+                match = re.search(REGEX_PATTERNS['cozunurluk'], text)
+                if match:
+                    w, h = match.groups()
+                    if int(w) > 500 and int(h) > 500:  # Gerçek çözünürlük olması için
+                        specs['cozunurluk'] = f"{w}x{h}"
     
     # RAM
     if 'ram' not in specs:
@@ -619,61 +635,71 @@ def parse_yatas(soup, url):
     return specs
 
 # ============================================
-# KATEGORİ TAHMİNİ
+# KATEGORİ VE ODA TAHMİNİ
 # ============================================
-def detect_category(url, title, specs):
-    """URL ve başlıktan kategori tahmini"""
+def detect_category_and_room(url, title, specs):
+    """URL ve başlıktan kategori ve oda tahmini"""
     url_lower = url.lower()
     title_lower = (title or '').lower()
     combined = url_lower + ' ' + title_lower
-    
+
     # Beyaz Eşya
     if any(x in combined for x in ['buzdolabı', 'buzdolabi', 'refrigerator', 'fridge']):
-        return 'Beyaz Eşya', 'Buzdolabı'
+        return 'Beyaz Eşya', 'Buzdolabı', 'Mutfak'
     if any(x in combined for x in ['çamaşır', 'camasir', 'washing', 'washer']):
-        return 'Beyaz Eşya', 'Çamaşır Makinesi'
+        return 'Beyaz Eşya', 'Çamaşır Makinesi', 'Banyo'
     if any(x in combined for x in ['bulaşık', 'bulasik', 'dishwasher']):
-        return 'Beyaz Eşya', 'Bulaşık Makinesi'
+        return 'Beyaz Eşya', 'Bulaşık Makinesi', 'Mutfak'
     if any(x in combined for x in ['kurutma', 'dryer']):
-        return 'Beyaz Eşya', 'Kurutma Makinesi'
+        return 'Beyaz Eşya', 'Kurutma Makinesi', 'Banyo'
     if any(x in combined for x in ['fırın', 'firin', 'oven']):
-        return 'Beyaz Eşya', 'Fırın'
+        return 'Beyaz Eşya', 'Fırın', 'Mutfak'
     if any(x in combined for x in ['derin dondurucu', 'freezer']):
-        return 'Beyaz Eşya', 'Derin Dondurucu'
-    
+        return 'Beyaz Eşya', 'Derin Dondurucu', 'Mutfak'
+
     # Mobilya
     if any(x in combined for x in ['koltuk', 'sofa', 'couch']):
-        return 'Mobilya', 'Koltuk Takımı'
+        return 'Mobilya', 'Koltuk Takımı', 'Salon'
     if any(x in combined for x in ['masa', 'table', 'desk']):
-        return 'Mobilya', 'Yemek Masası'
+        return 'Mobilya', 'Yemek Masası', 'Salon'
     if any(x in combined for x in ['dolap', 'cabinet', 'wardrobe']):
-        return 'Mobilya', 'Dolap'
-    if any(x in combined for x in ['tv ünitesi', 'tv-unitesi']):
-        return 'Mobilya', 'TV Ünitesi'
-    
+        return 'Mobilya', 'Dolap', 'Yatak Odası'
+    if any(x in combined for x in ['tv ünitesi', 'tv-unitesi', 'tv unite']):
+        return 'Mobilya', 'TV Ünitesi', 'Salon'
+
     # Elektronik
     if any(x in combined for x in ['televizyon', 'tv', 'led tv', 'smart tv']):
-        return 'Elektronik', 'Televizyon'
+        return 'Elektronik', 'Televizyon', 'Salon'
     if any(x in combined for x in ['klima', 'air conditioner']):
-        return 'Elektronik', 'Klima'
+        return 'Elektronik', 'Klima', 'Salon'
     if any(x in combined for x in ['laptop', 'notebook', 'bilgisayar', 'zenbook', 'macbook']):
-        return 'Elektronik', 'Genel'
+        return 'Elektronik', 'Genel', 'Çalışma Odası'
     if any(x in combined for x in ['monitör', 'monitor']):
-        return 'Elektronik', 'Genel'
-    
+        return 'Elektronik', 'Genel', 'Çalışma Odası'
+
     # Tekstil
     if any(x in combined for x in ['yatak', 'mattress', 'bedding']):
-        return 'Tekstil', 'Genel'
+        return 'Tekstil', 'Genel', 'Yatak Odası'
     if any(x in combined for x in ['nevresim', 'pike', 'yorgan']):
-        return 'Tekstil', 'Nevresim Takımı'
-    
+        return 'Tekstil', 'Nevresim Takımı', 'Yatak Odası'
+
     # Küçük Ev Aletleri
     if any(x in combined for x in ['süpürge', 'supurge', 'vacuum', 'mop']):
-        return 'Diğer', 'Genel'
+        return 'Diğer', 'Genel', 'Diğer'
     if any(x in combined for x in ['blender', 'mikser', 'kahve makinesi']):
-        return 'Mutfak Gereci', 'Genel'
-    
-    return 'Diğer', 'Genel'
+        return 'Mutfak Gereci', 'Genel', 'Mutfak'
+
+    # Banyo ürünleri
+    if any(x in combined for x in ['lavabo', 'klozet', 'duş', 'dus', 'batarya', 'banyo']):
+        return 'Banyo', 'Genel', 'Banyo'
+
+    return 'Diğer', 'Genel', 'Salon'
+
+# Geriye uyumluluk için eski fonksiyon
+def detect_category(url, title, specs):
+    """Eski API - kategori ve alt kategori döndürür"""
+    kategori, alt_kategori, _ = detect_category_and_room(url, title, specs)
+    return kategori, alt_kategori
 
 # ============================================
 # ANA FONKSİYON
@@ -765,15 +791,17 @@ def scrape_product(url):
         # ============ ADIM 5: REGEX MADENCİLİĞİ ============
         all_specs = extract_with_regex(soup, all_specs)
         
-        # Kategori al (site-özel'den veya tahmin et)
+        # Kategori ve Oda al (site-özel'den veya tahmin et)
         kategori = site_specs.get('_kategori', '')
         alt_kategori = site_specs.get('_alt_kategori', '')
-        
+        oda = ''
+
         if not kategori:
-            kategori, alt_kategori = detect_category(url, result['title'], all_specs)
-        
+            kategori, alt_kategori, oda = detect_category_and_room(url, result['title'], all_specs)
+
         result['kategori_tahmini'] = kategori
         result['alt_kategori_tahmini'] = alt_kategori
+        result['oda_tahmini'] = oda
         
         # _kategori gibi internal key'leri temizle
         result['specs'] = {k: v for k, v in all_specs.items() if not k.startswith('_')}
