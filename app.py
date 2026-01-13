@@ -92,6 +92,93 @@ ODALAR = ['Salon', 'Yatak Odası', 'Mutfak', 'Banyo', 'Çocuk Odası', 'Çalış
 # Alt kategori listesi (frontend için)
 ALT_KATEGORILER = {k: list(v.keys()) for k, v in KATEGORI_ALANLARI.items()}
 
+# Eksik Ürünler Şablonu - Yeni evlenecek çiftler için temel ihtiyaçlar
+EKSIK_URUNLER_SABLONU = {
+    'Mutfak Temel İhtiyaçlar': {
+        'icon': '🍳',
+        'items': [
+            {'name': 'Çamaşır Makinesi', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Bulaşık Makinesi', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Buzdolabı', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Ocak/Fırın', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Mikrodalga Fırın', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Çay Makinesi', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Tost Makinesi', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Düşük'},
+            {'name': 'Blender/Doğrayıcı', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Yemek Takımı (24 parça)', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Tencere Seti', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Tava Seti', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Çatal Bıçak Takımı', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'}
+        ]
+    },
+    'Yatak Odası Temel İhtiyaçlar': {
+        'icon': '🛏️',
+        'items': [
+            {'name': 'Yatak (Baza + Yatak)', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Gardrop/Dolap', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Şifonyer', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Normal'},
+            {'name': 'Çarşaf Takımı (2-3 adet)', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yorgan (Kış+Yaz)', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yastık Seti', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yatak Örtüsü', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Normal'},
+            {'name': 'Komodin', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Düşük'},
+            {'name': 'Abajur', 'category': 'Aydınlatma', 'room': 'Yatak Odası', 'priority': 'Düşük'}
+        ]
+    },
+    'Salon Temel İhtiyaçlar': {
+        'icon': '🛋️',
+        'items': [
+            {'name': 'Koltuk Takımı (3+2+1)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'TV Ünitesi', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Televizyon', 'category': 'Elektronik', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Orta Sehpa', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Zigon Sehpa', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Düşük'},
+            {'name': 'Halı', 'category': 'Dekorasyon', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Perde', 'category': 'Tekstil', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Avize/Aydınlatma', 'category': 'Aydınlatma', 'room': 'Salon', 'priority': 'Yüksek'}
+        ]
+    },
+    'Banyo Temel İhtiyaçlar': {
+        'icon': '🚿',
+        'items': [
+            {'name': 'Havlu Seti (4-6 adet)', 'category': 'Tekstil', 'room': 'Banyo', 'priority': 'Yüksek'},
+            {'name': 'Çamaşır Sepeti', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Banyo Dolabı/Aynası', 'category': 'Mobilya', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Duş Perdesi', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Banyo Paspası', 'category': 'Tekstil', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Çöp Kovası', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'}
+        ]
+    },
+    'Yemek Odası': {
+        'icon': '🍽️',
+        'items': [
+            {'name': 'Yemek Masası (4-6 kişilik)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'Yemek Sandalyeleri (4-6 adet)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'Masa Örtüsü', 'category': 'Tekstil', 'room': 'Salon', 'priority': 'Düşük'},
+            {'name': 'Mutfak Dolabı', 'category': 'Mobilya', 'room': 'Mutfak', 'priority': 'Normal'}
+        ]
+    },
+    'Temizlik Araçları': {
+        'icon': '🧹',
+        'items': [
+            {'name': 'Süpürge (Elektrikli)', 'category': 'Küçük Ev Aletleri', 'room': 'Diğer', 'priority': 'Yüksek'},
+            {'name': 'Ütü + Ütü Masası', 'category': 'Küçük Ev Aletleri', 'room': 'Diğer', 'priority': 'Yüksek'},
+            {'name': 'Paspas/Süpürge Seti', 'category': 'Temizlik', 'room': 'Diğer', 'priority': 'Normal'},
+            {'name': 'Kova/Fırça Seti', 'category': 'Temizlik', 'room': 'Diğer', 'priority': 'Normal'}
+        ]
+    },
+    'Küçük Aksesuarlar': {
+        'icon': '🔧',
+        'items': [
+            {'name': 'Çöp Kovası (Mutfak)', 'category': 'Diğer', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Askılık', 'category': 'Mobilya', 'room': 'Antre', 'priority': 'Normal'},
+            {'name': 'Ayakkabılık', 'category': 'Mobilya', 'room': 'Antre', 'priority': 'Normal'},
+            {'name': 'Priz/Çoklayıcı', 'category': 'Elektronik', 'room': 'Diğer', 'priority': 'Normal'},
+            {'name': 'Çaydanlık', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Yüksek'}
+        ]
+    }
+}
+
 # Klasör kontrolü ve oluşturma
 def ensure_upload_folder():
     """Upload klasörünü kontrol et ve yoksa oluştur"""
@@ -1245,6 +1332,11 @@ def toggle_statu(id):
 def get_kategori_alanlari():
     """Kategori alanlarını döndür"""
     return jsonify(KATEGORI_ALANLARI)
+
+@app.route('/api/eksik-urunler-sablonu', methods=['GET'])
+def get_eksik_urunler_sablonu():
+    """Eksik ürünler şablonunu döndür"""
+    return jsonify(EKSIK_URUNLER_SABLONU)
 
 @app.route('/api/backup/json', methods=['GET'])
 def backup_json():
