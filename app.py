@@ -240,6 +240,18 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         cursor.execute('INSERT INTO butce (id, toplam_butce) VALUES (1, 100000)')
 
+    # Fiyat geçmişi tablosu
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS fiyat_gecmisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            urun_id INTEGER NOT NULL,
+            fiyat REAL NOT NULL,
+            indirimli_fiyat REAL,
+            kayit_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (urun_id) REFERENCES urunler(id) ON DELETE CASCADE
+        )
+    ''')
+
     # Migration: Yeni sütunları ekle (eğer yoksa)
     try:
         cursor.execute("SELECT indirimli_fiyat FROM urunler LIMIT 1")
@@ -887,10 +899,18 @@ def add_urun():
             json.dumps(teknik, ensure_ascii=False),
             data.get('notlar', '')
         ))
-        conn.commit()
         new_id = cursor.lastrowid
+
+        # İlk fiyatı geçmişe kaydet
+        if fiyat > 0:
+            cursor.execute('''
+                INSERT INTO fiyat_gecmisi (urun_id, fiyat, indirimli_fiyat)
+                VALUES (?, ?, ?)
+            ''', (new_id, fiyat, indirimli_fiyat))
+
+        conn.commit()
         conn.close()
-        
+
         return jsonify({'success': True, 'id': new_id, 'message': 'Ürün başarıyla eklendi!'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -946,12 +966,17 @@ def update_urun(id):
         indirimli_fiyat = data.get('indirimli_fiyat', '')
         indirimli_fiyat = float(indirimli_fiyat) if indirimli_fiyat else None
 
-        # Fiyat değiştiyse güncelleme tarihini yenile
+        # Fiyat değiştiyse güncelleme tarihini yenile ve geçmişe kaydet
         fiyat_guncelleme_sql = ''
+        cursor = conn.cursor()
         if fiyat != urun['fiyat'] or indirimli_fiyat != urun.get('indirimli_fiyat'):
             fiyat_guncelleme_sql = ", fiyat_guncelleme_tarihi = datetime('now')"
+            # Fiyat geçmişine kaydet
+            cursor.execute('''
+                INSERT INTO fiyat_gecmisi (urun_id, fiyat, indirimli_fiyat)
+                VALUES (?, ?, ?)
+            ''', (id, fiyat, indirimli_fiyat))
 
-        cursor = conn.cursor()
         cursor.execute(f'''
             UPDATE urunler SET
                 urun_adi = ?, marka = ?, fiyat = ?, indirimli_fiyat = ?, link = ?, resim_url = ?,
@@ -1337,6 +1362,27 @@ def get_kategori_alanlari():
 def get_eksik_urunler_sablonu():
     """Eksik ürünler şablonunu döndür"""
     return jsonify(EKSIK_URUNLER_SABLONU)
+
+@app.route('/api/urunler/<int:id>/fiyat-gecmisi', methods=['GET'])
+def get_fiyat_gecmisi(id):
+    """Ürünün fiyat geçmişini döndür"""
+    try:
+        conn = get_db_connection()
+        gecmis = conn.execute('''
+            SELECT fiyat, indirimli_fiyat, kayit_tarihi
+            FROM fiyat_gecmisi
+            WHERE urun_id = ?
+            ORDER BY kayit_tarihi DESC
+            LIMIT 50
+        ''', (id,)).fetchall()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'history': [dict(row) for row in gecmis]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/backup/json', methods=['GET'])
 def backup_json():

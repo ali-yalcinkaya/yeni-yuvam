@@ -325,6 +325,34 @@
                                 <input v-model="formData.indirimli_fiyat" type="number" step="0.01" min="0" placeholder="Varsa indirimli fiyatı girin" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
                                 <p class="mt-1 text-xs text-slate-400">💡 İndirimli fiyat girerseniz, orjinal fiyat üstü çizili gösterilir</p>
                             </div>
+                            <!-- Fiyat Geçmişi (sadece edit modunda) -->
+                            <div v-if="editMode && priceHistory.length > 0" class="md:col-span-2">
+                                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h4 class="text-sm font-semibold text-blue-700 flex items-center gap-2">
+                                            📊 Fiyat Geçmişi
+                                            <span class="text-xs font-normal text-blue-500">(Son {{ priceHistory.length }} güncelleme)</span>
+                                        </h4>
+                                        <button type="button" @click="showPriceHistory = !showPriceHistory" class="text-xs text-blue-600 hover:text-blue-700">
+                                            {{ showPriceHistory ? 'Gizle' : 'Göster' }}
+                                        </button>
+                                    </div>
+                                    <div v-show="showPriceHistory" class="mt-3 space-y-2 max-h-32 overflow-y-auto">
+                                        <div v-for="(record, idx) in priceHistory" :key="idx" class="flex items-center justify-between text-xs p-2 bg-white rounded-lg">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-slate-500">{{ formatDate(record.kayit_tarihi) }}</span>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-medium text-slate-700">{{ formatPrice(record.fiyat) }} ₺</span>
+                                                    <span v-if="record.indirimli_fiyat" class="text-rose-600">→ {{ formatPrice(record.indirimli_fiyat) }} ₺</span>
+                                                </div>
+                                            </div>
+                                            <span v-if="idx < priceHistory.length - 1" :class="getPriceChangeClass(record, priceHistory[idx + 1])" class="font-medium">
+                                                {{ getPriceChange(record, priceHistory[idx + 1]) }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
                                 <select v-model="formData.kategori" @change="onKategoriChange" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
@@ -695,6 +723,8 @@
                 const compareProducts = ref([]);
                 const showChecklist = ref(false);
                 const checklistTemplate = ref({});
+                const priceHistory = ref([]);
+                const showPriceHistory = ref(false);
 
                 const seciliUrunSayisi = computed(() => urunler.value.filter(u => u.secili).length);
                 const hasActiveFilters = computed(() => aktifFiltre.value.kategori || aktifFiltre.value.alt_kategori || aktifFiltre.value.oda || aktifFiltre.value.statu || aramaMetni.value);
@@ -847,6 +877,8 @@
                             const teknik = JSON.parse(data.teknik_ozellikler);
                             Object.assign(formData.value, teknik);
                         }
+                        // Fiyat geçmişini çek
+                        await fetchPriceHistory(urun.id);
                     } catch (e) { formData.value = { ...urun }; }
                     scrapedSpecs.value = {};
                     selectedFile.value = null;
@@ -1147,23 +1179,75 @@
                     return count;
                 };
 
+                // Fiyat Geçmişi fonksiyonları
+                const fetchPriceHistory = async (urunId) => {
+                    try {
+                        const res = await fetch(`/api/urunler/${urunId}/fiyat-gecmisi`);
+                        const data = await res.json();
+                        if (data.success) {
+                            priceHistory.value = data.history;
+                            showPriceHistory.value = data.history.length > 0;
+                        }
+                    } catch (e) {
+                        console.error('Fiyat geçmişi yüklenemedi:', e);
+                        priceHistory.value = [];
+                    }
+                };
+
+                const formatDate = (dateString) => {
+                    const date = new Date(dateString);
+                    const now = new Date();
+                    const diff = now - date;
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+                    if (days === 0) return 'Bugün';
+                    if (days === 1) return 'Dün';
+                    if (days < 7) return `${days} gün önce`;
+                    if (days < 30) return `${Math.floor(days / 7)} hafta önce`;
+                    if (days < 365) return `${Math.floor(days / 30)} ay önce`;
+
+                    return date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+                };
+
+                const getPriceChange = (current, previous) => {
+                    const currentPrice = current.indirimli_fiyat || current.fiyat;
+                    const previousPrice = previous.indirimli_fiyat || previous.fiyat;
+                    const diff = currentPrice - previousPrice;
+
+                    if (diff === 0) return '-';
+                    const sign = diff > 0 ? '+' : '';
+                    return `${sign}${formatPrice(Math.abs(diff))} ₺`;
+                };
+
+                const getPriceChangeClass = (current, previous) => {
+                    const currentPrice = current.indirimli_fiyat || current.fiyat;
+                    const previousPrice = previous.indirimli_fiyat || previous.fiyat;
+                    const diff = currentPrice - previousPrice;
+
+                    if (diff > 0) return 'text-red-600';
+                    if (diff < 0) return 'text-green-600';
+                    return 'text-slate-400';
+                };
+
                 onMounted(() => {
                     fetchUrunler();
                     fetchDashboard();
                     fetchChecklistTemplate();
                 });
-                
+
                 return {
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
                     showModal, showDashboard, showDeleteConfirm, showCompare, showChecklist, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
                     aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, jsonFileInput, seciliToplam, seciliUrunSayisi, compareProducts, checklistTemplate,
+                    priceHistory, showPriceHistory,
                     hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
                     fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
                     openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange, onJSONFileChange,
                     scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
                     backupJSON, restoreJSONClick, compareSelected, getAllSpecKeys, getSpecValue,
-                    isItemInList, toggleItemCheck, addItemFromChecklist, getCheckedCount, getTotalCheckedCount, getTotalItemsCount
+                    isItemInList, toggleItemCheck, addItemFromChecklist, getCheckedCount, getTotalCheckedCount, getTotalItemsCount,
+                    fetchPriceHistory, formatDate, getPriceChange, getPriceChangeClass
                 };
             }
         }).mount('#app');
