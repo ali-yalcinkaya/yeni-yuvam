@@ -364,7 +364,7 @@ def extract_html_elements(soup, url):
 # ============================================
 # ADIM 4: REGEX MADENCILIĞI
 # ============================================
-def extract_with_regex(soup, existing_specs=None):
+def extract_with_regex(soup, title='', existing_specs=None):
     """Regex ile sayfadan teknik özellik çıkar"""
     if existing_specs is None:
         existing_specs = {}
@@ -802,7 +802,7 @@ def scrape_product(url):
         all_specs.update(site_specs)
         
         # ============ ADIM 5: REGEX MADENCİLİĞİ ============
-        all_specs = extract_with_regex(soup, all_specs)
+        all_specs = extract_with_regex(soup, result['title'], all_specs)
         
         # Kategori ve Oda al (site-özel'den veya tahmin et)
         kategori = site_specs.get('_kategori', '')
