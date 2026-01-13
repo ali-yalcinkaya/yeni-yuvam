@@ -250,7 +250,13 @@
                             <p class="font-display text-2xl font-bold text-rose-500">{{ formatPrice(seciliToplam) }} ₺</p>
                         </div>
                     </div>
-                    <button v-if="seciliUrunSayisi > 0" @click="temizleSecim" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all text-sm">Seçimi Temizle</button>
+                    <div class="flex gap-2">
+                        <button v-if="seciliUrunSayisi >= 2" @click="compareSelected" class="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-all text-sm font-medium flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                            Kıyasla ({{seciliUrunSayisi}})
+                        </button>
+                        <button v-if="seciliUrunSayisi > 0" @click="temizleSecim" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all text-sm">Seçimi Temizle</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -503,6 +509,50 @@
                         <button @click="showDeleteConfirm = false" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-all">İptal</button>
                         <button @click="deleteUrun" class="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all">Sil</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ürün Kıyaslama Modal -->
+        <div v-if="showCompare" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @click.self="showCompare = false">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden animate-fadeIn">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-xl font-semibold text-slate-800">⚖️ Ürün Kıyaslama</h2>
+                        <button @click="showCompare = false" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">{{ compareProducts.length }} ürün karşılaştırılıyor</p>
+                </div>
+                <div class="p-6 overflow-auto" style="max-height: calc(90vh - 120px);">
+                    <table class="w-full text-sm border-collapse">
+                        <thead>
+                            <tr class="border-b-2 border-slate-200">
+                                <th class="text-left py-3 px-4 font-semibold text-slate-700 sticky left-0 bg-white">Özellik</th>
+                                <th v-for="urun in compareProducts" :key="urun.id" class="py-3 px-4 text-center min-w-[200px]">
+                                    <img v-if="urun.resim_url" :src="urun.resim_url" :alt="urun.urun_adi" class="w-20 h-20 mx-auto object-cover rounded-lg mb-2">
+                                    <p class="font-semibold">{{ urun.urun_adi }}</p>
+                                    <p class="text-xs text-slate-500">{{ urun.marka }}</p>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b"><td class="py-3 px-4 font-medium sticky left-0 bg-white">Fiyat</td>
+                                <td v-for="urun in compareProducts" :key="'f'+urun.id" class="py-3 px-4 text-center">
+                                    <span v-if="urun.indirimli_fiyat" class="block text-xs line-through text-slate-400">{{ formatPrice(urun.fiyat) }} ₺</span>
+                                    <span class="font-semibold" :class="urun.indirimli_fiyat ? 'text-rose-600' : ''">{{ formatPrice(urun.indirimli_fiyat || urun.fiyat) }} ₺</span>
+                                </td>
+                            </tr>
+                            <tr class="border-b"><td class="py-3 px-4 font-medium sticky left-0 bg-white">Kategori</td><td v-for="urun in compareProducts" :key="'k'+urun.id" class="py-3 px-4 text-center">{{ urun.kategori }}</td></tr>
+                            <tr class="border-b"><td class="py-3 px-4 font-medium sticky left-0 bg-white">Alt Kategori</td><td v-for="urun in compareProducts" :key="'ak'+urun.id" class="py-3 px-4 text-center">{{ urun.alt_kategori }}</td></tr>
+                            <tr class="border-b"><td class="py-3 px-4 font-medium sticky left-0 bg-white">Oda</td><td v-for="urun in compareProducts" :key="'o'+urun.id" class="py-3 px-4 text-center">{{ urun.oda }}</td></tr>
+                            <tr v-for="specKey in getAllSpecKeys(compareProducts)" :key="specKey" class="border-b">
+                                <td class="py-3 px-4 font-medium sticky left-0 bg-white">{{ formatSpecName(specKey) }}</td>
+                                <td v-for="urun in compareProducts" :key="urun.id+specKey" class="py-3 px-4 text-center">{{ getSpecValue(urun, specKey) || '-' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -835,17 +885,51 @@
                 const exportExcel = () => { window.location.href = '/api/export/excel'; };
                 const exportExcelAlinanlar = () => { window.location.href = '/api/export/excel/alinanlar'; };
 
+                // Kıyaslama fonksiyonları
+                const compareSelected = () => {
+                    compareProducts.value = urunler.value.filter(u => u.secili);
+                    if (compareProducts.value.length < 2) {
+                        showToast('Lütfen en az 2 ürün seçin', 'error');
+                        return;
+                    }
+                    showCompare.value = true;
+                };
+
+                const getAllSpecKeys = (products) => {
+                    const keys = new Set();
+                    products.forEach(p => {
+                        if (p.teknik_ozellikler) {
+                            try {
+                                const specs = JSON.parse(p.teknik_ozellikler);
+                                Object.keys(specs).forEach(k => keys.add(k));
+                            } catch (e) {}
+                        }
+                    });
+                    return Array.from(keys).sort();
+                };
+
+                const getSpecValue = (urun, specKey) => {
+                    if (!urun.teknik_ozellikler) return null;
+                    try {
+                        const specs = JSON.parse(urun.teknik_ozellikler);
+                        return specs[specKey];
+                    } catch (e) {
+                        return null;
+                    }
+                };
+
                 onMounted(() => { fetchUrunler(); fetchDashboard(); });
                 
                 return {
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
-                    showModal, showDashboard, showDeleteConfirm, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
-                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi,
+                    showModal, showDashboard, showDeleteConfirm, showCompare, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
+                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi, compareProducts,
                     hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
                     fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
                     openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange,
-                    scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar
+                    scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
+                    compareSelected, getAllSpecKeys, getSpecValue
                 };
             }
         }).mount('#app');
