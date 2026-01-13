@@ -605,9 +605,15 @@
                 <div class="p-6 border-b border-slate-100">
                     <div class="flex items-center justify-between">
                         <h2 class="font-display text-xl font-semibold text-slate-800">📋 Eksik Ürünler Kontrol Listesi</h2>
-                        <button @click="showChecklist = false" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
-                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button @click="showAddCustomItem = true" class="px-4 py-2 rounded-xl bg-purple-500 text-white hover:bg-purple-600 transition-all text-sm font-medium flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                Yeni Ürün
+                            </button>
+                            <button @click="showChecklist = false" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <p class="text-sm text-slate-500 mt-2">Yeni eviniz için ihtiyacınız olan ürünleri kontrol edin</p>
                 </div>
@@ -619,16 +625,17 @@
                             <span class="text-xs font-normal text-slate-400">({{ getCheckedCount(groupName) }}/{{ group.items.length }})</span>
                         </h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div v-for="(item, idx) in group.items" :key="idx"
+                            <div v-for="(item, idx) in group.items" :key="item.id || idx"
                                  class="flex items-center gap-3 p-3 rounded-xl border transition-all"
-                                 :class="isItemInList(item.name) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'">
+                                 :class="isItemInList(item.name) ? 'bg-green-50 border-green-200' : item.custom ? 'bg-purple-50 border-purple-200' : 'bg-slate-50 border-slate-200'">
                                 <input type="checkbox"
                                        :checked="isItemInList(item.name)"
                                        disabled
                                        class="w-5 h-5 rounded border-2 text-sage-500">
                                 <div class="flex-1">
-                                    <div class="font-medium text-sm" :class="isItemInList(item.name) ? 'text-green-700 line-through' : 'text-slate-700'">
+                                    <div class="font-medium text-sm flex items-center gap-2" :class="isItemInList(item.name) ? 'text-green-700 line-through' : 'text-slate-700'">
                                         {{ item.name }}
+                                        <span v-if="item.custom" class="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-600">Özel</span>
                                     </div>
                                     <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                                         <span class="px-2 py-0.5 rounded bg-white">{{ item.category }}</span>
@@ -636,6 +643,11 @@
                                         <span :class="getPriorityClass(item.priority)">{{ item.priority }}</span>
                                     </div>
                                 </div>
+                                <button v-if="item.custom" @click="deleteCustomItem(item.id)"
+                                        class="text-red-500 hover:text-red-700 p-1 rounded transition-all"
+                                        title="Sil">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -647,6 +659,64 @@
                     <button @click="showChecklist = false" class="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all text-sm font-medium">
                         Kapat
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yeni Custom Item Ekleme Modal -->
+        <div v-if="showAddCustomItem" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="background: rgba(0,0,0,0.5);" @click.self="showAddCustomItem = false">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fadeIn">
+                <div class="p-6 border-b border-slate-100">
+                    <h3 class="font-display text-lg font-semibold text-slate-800">Listeye Yeni Ürün Ekle</h3>
+                    <p class="text-sm text-slate-500 mt-1">Eksik ürünler listesine özel ürün ekleyin</p>
+                </div>
+                <div class="p-6">
+                    <form @submit.prevent="addCustomItem" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Grup</label>
+                            <select v-model="customItemForm.group_name" required class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                <option value="">Grup Seçin</option>
+                                <option v-for="(group, groupName) in checklistTemplate" :key="groupName" :value="groupName">{{ groupName }}</option>
+                                <option value="__new__">+ Yeni Grup Oluştur</option>
+                            </select>
+                        </div>
+                        <div v-if="customItemForm.group_name === '__new__'">
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Yeni Grup Adı</label>
+                            <input v-model="customItemForm.new_group_name" type="text" placeholder="Örn: Bahçe Eşyaları" required class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Ürün Adı *</label>
+                            <input v-model="customItemForm.name" type="text" placeholder="Örn: Elektrikli Süpürge" required class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
+                            <select v-model="customItemForm.category" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                <option v-for="k in kategoriler" :key="k" :value="k">{{ k }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Oda</label>
+                            <select v-model="customItemForm.room" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                <option v-for="o in odalar" :key="o" :value="o">{{ o }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Öncelik</label>
+                            <select v-model="customItemForm.priority" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                <option value="Yüksek">Yüksek</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Düşük">Düşük</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" @click="showAddCustomItem = false" class="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-medium">
+                                İptal
+                            </button>
+                            <button type="submit" class="flex-1 px-4 py-3 rounded-xl bg-purple-500 text-white hover:bg-purple-600 transition-all font-medium">
+                                Ekle
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -718,6 +788,15 @@
                 const compareProducts = ref([]);
                 const showChecklist = ref(false);
                 const checklistTemplate = ref({});
+                const showAddCustomItem = ref(false);
+                const customItemForm = ref({
+                    group_name: '',
+                    new_group_name: '',
+                    name: '',
+                    category: 'Diğer',
+                    room: 'Salon',
+                    priority: 'Normal'
+                });
                 const priceHistory = ref([]);
                 const showPriceHistory = ref(false);
 
@@ -1224,6 +1303,76 @@
                     return 'text-slate-400';
                 };
 
+                // Özel kontrol listesi öğesi ekleme
+                const addCustomItem = async () => {
+                    try {
+                        saving.value = true;
+                        const groupName = customItemForm.value.group_name === '__new__'
+                            ? customItemForm.value.new_group_name
+                            : customItemForm.value.group_name;
+
+                        if (!groupName || !customItemForm.value.name) {
+                            showToast('Lütfen tüm alanları doldurun', 'error');
+                            return;
+                        }
+
+                        const res = await fetch('/api/custom-checklist-items', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: customItemForm.value.name,
+                                category: customItemForm.value.category,
+                                room: customItemForm.value.room,
+                                priority: customItemForm.value.priority,
+                                group_name: groupName
+                            })
+                        });
+
+                        const result = await res.json();
+                        if (result.success) {
+                            showToast('Ürün listeye eklendi');
+                            await fetchChecklistTemplate();
+                            showAddCustomItem.value = false;
+                            // Reset form
+                            customItemForm.value = {
+                                group_name: '',
+                                new_group_name: '',
+                                name: '',
+                                category: 'Diğer',
+                                room: 'Salon',
+                                priority: 'Normal'
+                            };
+                        } else {
+                            showToast('Ekleme hatası', 'error');
+                        }
+                    } catch (e) {
+                        showToast('Ekleme hatası: ' + e.message, 'error');
+                    } finally {
+                        saving.value = false;
+                    }
+                };
+
+                // Özel kontrol listesi öğesini silme
+                const deleteCustomItem = async (id) => {
+                    if (!confirm('Bu öğeyi silmek istediğinize emin misiniz?')) return;
+
+                    try {
+                        const res = await fetch(`/api/custom-checklist-items/${id}`, {
+                            method: 'DELETE'
+                        });
+
+                        const result = await res.json();
+                        if (result.success) {
+                            showToast('Öğe silindi');
+                            await fetchChecklistTemplate();
+                        } else {
+                            showToast('Silme hatası', 'error');
+                        }
+                    } catch (e) {
+                        showToast('Silme hatası: ' + e.message, 'error');
+                    }
+                };
+
                 onMounted(() => {
                     fetchUrunler();
                     fetchDashboard();
@@ -1234,7 +1383,7 @@
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
                     showModal, showDashboard, showDeleteConfirm, showCompare, showChecklist, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
                     aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, jsonFileInput, seciliToplam, seciliUrunSayisi, compareProducts, checklistTemplate,
-                    priceHistory, showPriceHistory,
+                    priceHistory, showPriceHistory, showAddCustomItem, customItemForm,
                     hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
                     fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
@@ -1242,7 +1391,8 @@
                     scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
                     backupJSON, restoreJSONClick, compareSelected, getAllSpecKeys, getSpecValue,
                     isItemInList, getCheckedCount, getTotalCheckedCount, getTotalItemsCount,
-                    fetchPriceHistory, formatDate, getPriceChange, getPriceChangeClass
+                    fetchPriceHistory, formatDate, getPriceChange, getPriceChangeClass,
+                    addCustomItem, deleteCustomItem
                 };
             }
         }).mount('#app');
