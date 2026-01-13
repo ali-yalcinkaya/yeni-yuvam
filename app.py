@@ -250,21 +250,28 @@ def scrape_arcelik(url, soup):
                     src = 'https:' + src
                 elif src.startswith('/'):
                     src = 'https://www.arcelik.com.tr' + src
+                elif src.startswith('www.'):
+                    src = 'https://' + src
 
-                # Arçelik resim optimizasyonu - 1000x1000 boyut
-                if 'arcelik.com.tr/media/' in src or src.startswith('https://www.arcelik.com.tr/media/'):
+                # Arçelik resim optimizasyonu - 1000x1000 boyut (SADECE webp formatı)
+                if 'arcelik.com.tr/media/' in src:
                     # Eğer resize parametresi yoksa ekle
-                    if '/resize/' not in src and '.png' in src:
+                    if '/resize/' not in src:
                         src = src.replace('/media/', '/media/resize/')
-                        # Dosya adından sonra boyut ekle
-                        src = src.replace('.png', '.png/1000Wx1000H/image.webp')
-                    elif '/resize/' not in src and '.jpg' in src:
-                        src = src.replace('/media/', '/media/resize/')
-                        src = src.replace('.jpg', '.jpg/1000Wx1000H/image.webp')
-                    elif '/resize/' not in src and '.webp' in src:
-                        src = src.replace('/media/', '/media/resize/')
-                        if '/1000Wx1000H/' not in src:
-                            src = src.replace('.webp', '/1000Wx1000H/image.webp')
+                        # Dosya uzantısını bul ve webp formatına çevir
+                        if '.png' in src.lower():
+                            src = src.replace('.png', '.png/1000Wx1000H/image.webp', 1)
+                            src = src.replace('.PNG', '.PNG/1000Wx1000H/image.webp', 1)
+                        elif '.jpg' in src.lower() or '.jpeg' in src.lower():
+                            if '.jpg' in src:
+                                src = src.replace('.jpg', '.jpg/1000Wx1000H/image.webp', 1)
+                            elif '.JPG' in src:
+                                src = src.replace('.JPG', '.JPG/1000Wx1000H/image.webp', 1)
+                            elif '.jpeg' in src:
+                                src = src.replace('.jpeg', '.jpeg/1000Wx1000H/image.webp', 1)
+                        elif '.webp' in src.lower():
+                            if '/1000Wx1000H/' not in src:
+                                src = src.replace('.webp', '.webp/1000Wx1000H/image.webp', 1)
 
                 data['resim_url'] = src
                 break
