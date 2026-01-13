@@ -17,7 +17,7 @@ from io import BytesIO
 
 # Flask App Configuration
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'ev-esyasi-gizli-anahtar-2024'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ev-esyasi-gizli-anahtar-2024-CHANGE-IN-PRODUCTION')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -1245,6 +1245,138 @@ def toggle_statu(id):
 def get_kategori_alanlari():
     """Kategori alanlarını döndür"""
     return jsonify(KATEGORI_ALANLARI)
+
+@app.route('/api/backup/json', methods=['GET'])
+def backup_json():
+    """Tüm veritabanını JSON olarak yedekle"""
+    try:
+        conn = get_db_connection()
+
+        # Ürünleri çek
+        urunler = conn.execute('SELECT * FROM urunler ORDER BY id').fetchall()
+        urunler_list = [dict(row) for row in urunler]
+
+        # Bütçeyi çek
+        butce = conn.execute('SELECT * FROM butce WHERE id = 1').fetchone()
+        butce_dict = dict(butce) if butce else {'toplam_butce': 0}
+
+        conn.close()
+
+        # JSON yapısı oluştur
+        backup_data = {
+            'backup_date': datetime.now().isoformat(),
+            'version': '1.0',
+            'butce': butce_dict,
+            'urunler': urunler_list
+        }
+
+        # JSON dosyası oluştur
+        filename = f'yeni_yuva_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+
+        return jsonify({
+            'success': True,
+            'data': backup_data,
+            'filename': filename
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/restore/json', methods=['POST'])
+def restore_json():
+    """JSON yedeğinden veritabanını geri yükle"""
+    try:
+        data = request.get_json()
+        backup_data = data.get('backup_data')
+
+        if not backup_data:
+            return jsonify({'success': False, 'error': 'Yedek verisi bulunamadı'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Mevcut verileri temizle (OPSIYONEL - kullanıcıya sorulabilir)
+        replace_existing = data.get('replace_existing', False)
+        if replace_existing:
+            cursor.execute('DELETE FROM urunler')
+
+        # Bütçeyi geri yükle
+        if 'butce' in backup_data:
+            butce = backup_data['butce']
+            cursor.execute('''
+                UPDATE butce
+                SET toplam_butce = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+            ''', (butce.get('toplam_butce', 0),))
+
+        # Ürünleri geri yükle
+        if 'urunler' in backup_data:
+            for urun in backup_data['urunler']:
+                # ID'yi yedeğe bırak veya yeni oluştur
+                if replace_existing and 'id' in urun:
+                    # ID'yi koruyarak ekle
+                    cursor.execute('''
+                        INSERT INTO urunler (
+                            id, urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi,
+                            link, resim_url, kategori, alt_kategori, oda, statu, oncelik,
+                            teknik_ozellikler, notlar, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        urun.get('id'),
+                        urun.get('urun_adi'),
+                        urun.get('marka'),
+                        urun.get('fiyat', 0),
+                        urun.get('indirimli_fiyat'),
+                        urun.get('fiyat_guncelleme_tarihi'),
+                        urun.get('link'),
+                        urun.get('resim_url'),
+                        urun.get('kategori', 'Diğer'),
+                        urun.get('alt_kategori', 'Genel'),
+                        urun.get('oda', 'Salon'),
+                        urun.get('statu', 'Araştırılıyor'),
+                        urun.get('oncelik', 'Normal'),
+                        urun.get('teknik_ozellikler'),
+                        urun.get('notlar'),
+                        urun.get('created_at'),
+                        urun.get('updated_at')
+                    ))
+                else:
+                    # Yeni ID ile ekle
+                    cursor.execute('''
+                        INSERT INTO urunler (
+                            urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi,
+                            link, resim_url, kategori, alt_kategori, oda, statu, oncelik,
+                            teknik_ozellikler, notlar, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        urun.get('urun_adi'),
+                        urun.get('marka'),
+                        urun.get('fiyat', 0),
+                        urun.get('indirimli_fiyat'),
+                        urun.get('fiyat_guncelleme_tarihi'),
+                        urun.get('link'),
+                        urun.get('resim_url'),
+                        urun.get('kategori', 'Diğer'),
+                        urun.get('alt_kategori', 'Genel'),
+                        urun.get('oda', 'Salon'),
+                        urun.get('statu', 'Araştırılıyor'),
+                        urun.get('oncelik', 'Normal'),
+                        urun.get('teknik_ozellikler'),
+                        urun.get('notlar'),
+                        urun.get('created_at'),
+                        urun.get('updated_at')
+                    ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'{len(backup_data.get("urunler", []))} ürün geri yüklendi'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Startup
 if __name__ == '__main__':

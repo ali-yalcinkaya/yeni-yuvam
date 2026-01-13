@@ -96,6 +96,16 @@
                                 <button @click="exportExcelAlinanlar" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">✅ Alınan Ürünler</button>
                             </div>
                         </div>
+                        <div class="relative group">
+                            <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all text-sm font-medium">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                                <span class="hidden sm:inline">Yedek</span>
+                            </button>
+                            <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <button @click="backupJSON" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">💾 Yedek Al (JSON)</button>
+                                <button @click="restoreJSONClick" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">📂 Geri Yükle</button>
+                            </div>
+                        </div>
                         <button @click="showDashboard = true" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-100 text-amber-600 hover:bg-amber-200 transition-all text-sm font-medium">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                             <span class="hidden sm:inline">Dashboard</span>
@@ -557,6 +567,9 @@
             </div>
         </div>
 
+        <!-- Hidden file input for JSON restore -->
+        <input type="file" ref="jsonFileInput" @change="onJSONFileChange" accept="application/json,.json" style="display: none;">
+
         <!-- Toast -->
         <div v-if="toast.show" class="fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-xl animate-fadeIn" :class="toast.type === 'success' ? 'bg-sage-500 text-white' : 'bg-red-500 text-white'">{{ toast.message }}</div>
     </div>
@@ -615,6 +628,7 @@
                 const toast = ref({ show: false, message: '', type: 'success' });
                 const fileInput = ref(null);
                 const selectedFile = ref(null);
+                const jsonFileInput = ref(null);
                 const seciliToplam = ref(0);
                 const showCompare = ref(false);
                 const compareProducts = ref([]);
@@ -885,6 +899,83 @@
                 const exportExcel = () => { window.location.href = '/api/export/excel'; };
                 const exportExcelAlinanlar = () => { window.location.href = '/api/export/excel/alinanlar'; };
 
+                // JSON Yedekleme fonksiyonları
+                const backupJSON = async () => {
+                    try {
+                        const res = await fetch('/api/backup/json');
+                        const result = await res.json();
+
+                        if (result.success) {
+                            // JSON'u dosya olarak indir
+                            const dataStr = JSON.stringify(result.data, null, 2);
+                            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                            const url = URL.createObjectURL(dataBlob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = result.filename;
+                            link.click();
+                            URL.revokeObjectURL(url);
+
+                            showToast('Yedek başarıyla oluşturuldu');
+                        } else {
+                            showToast('Yedek oluşturma hatası', 'error');
+                        }
+                    } catch (e) {
+                        showToast('Yedek oluşturma hatası: ' + e.message, 'error');
+                    }
+                };
+
+                const restoreJSONClick = () => {
+                    if (jsonFileInput.value) {
+                        jsonFileInput.value.click();
+                    }
+                };
+
+                const onJSONFileChange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    // Onay al
+                    const confirmed = confirm(
+                        'UYARI: Bu işlem mevcut verilerin ÜZERİNE yazacaktır!\n\n' +
+                        'Devam etmek istediğinize emin misiniz?\n\n' +
+                        'Önceki verilerinizi korumak için önce yedek almanızı öneririz.'
+                    );
+
+                    if (!confirmed) {
+                        e.target.value = '';
+                        return;
+                    }
+
+                    try {
+                        const text = await file.text();
+                        const backupData = JSON.parse(text);
+
+                        const res = await fetch('/api/restore/json', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                backup_data: backupData,
+                                replace_existing: true
+                            })
+                        });
+
+                        const result = await res.json();
+
+                        if (result.success) {
+                            showToast(result.message);
+                            await fetchUrunler();
+                            await fetchDashboard();
+                        } else {
+                            showToast('Geri yükleme hatası: ' + result.error, 'error');
+                        }
+                    } catch (e) {
+                        showToast('Dosya okuma hatası: ' + e.message, 'error');
+                    }
+
+                    e.target.value = '';
+                };
+
                 // Kıyaslama fonksiyonları
                 const compareSelected = () => {
                     compareProducts.value = urunler.value.filter(u => u.secili);
@@ -923,13 +1014,13 @@
                 return {
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
                     showModal, showDashboard, showDeleteConfirm, showCompare, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
-                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi, compareProducts,
+                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, jsonFileInput, seciliToplam, seciliUrunSayisi, compareProducts,
                     hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
                     fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
-                    openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange,
+                    openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange, onJSONFileChange,
                     scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
-                    compareSelected, getAllSpecKeys, getSpecValue
+                    backupJSON, restoreJSONClick, compareSelected, getAllSpecKeys, getSpecValue
                 };
             }
         }).mount('#app');

@@ -30,6 +30,27 @@ Evlilik hazırlıkları için akıllı ev eşyası takip ve yönetim sistemi.
    python app.py
    ```
 
+## 🔐 Güvenlik Yapılandırması
+
+Üretim ortamında mutlaka güvenli bir SECRET_KEY kullanın:
+
+1. `.env.example` dosyasını `.env` olarak kopyalayın:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. `.env` dosyasını düzenleyerek güvenli bir SECRET_KEY oluşturun:
+   ```bash
+   python -c 'import secrets; print(secrets.token_hex(32))'
+   ```
+
+3. Çıkan değeri `.env` dosyasına yapıştırın:
+   ```
+   SECRET_KEY=oluşturduğunuz-güvenli-anahtar-buraya
+   ```
+
+**Not**: `.env` dosyası git'e eklenmez, sadece sizin bilgisayarınızda kalır.
+
 ## 📂 Proje Yapısı
 
 ```
