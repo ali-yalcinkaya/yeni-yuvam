@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yeni Yuva | Ev Eşyası Yönetimi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cream: '#FDF8F3',
+                        rose: { 50: '#FFF5F5', 100: '#FFE8E8', 200: '#FFCCD2', 400: '#E8A5AF', 500: '#D4848F', 600: '#B85C68' },
+                        sage: { 50: '#F4F7F4', 100: '#E8EFE8', 200: '#C8DBC8', 400: '#8FB58F', 500: '#6B9B6B', 600: '#4A7A4A' },
+                        amber: { 50: '#FFFBF0', 100: '#FFF3D6', 200: '#FFE4A8', 400: '#F5C342', 500: '#D4A012', 600: '#A67C00' },
+                        slate: { 700: '#374151', 800: '#1F2937', 900: '#111827' }
+                    },
+                    fontFamily: {
+                        'display': ['Playfair Display', 'serif'],
+                        'sans': ['DM Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [v-cloak] { display: none; }
+        body { background: linear-gradient(135deg, #FDF8F3 0%, #FFF5F5 50%, #F4F7F4 100%); min-height: 100vh; }
+        .masonry-grid { column-count: 1; column-gap: 1.5rem; }
+        @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
+        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
+        @media (min-width: 1280px) { .masonry-grid { column-count: 4; } }
+        .masonry-item { break-inside: avoid; margin-bottom: 1.5rem; }
+        .card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.6); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); }
+        .modal-backdrop { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(8px); }
+        .custom-checkbox { appearance: none; width: 22px; height: 22px; border: 2px solid #D4848F; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; }
+        .custom-checkbox:checked { background: linear-gradient(135deg, #D4848F, #B85C68); border-color: #B85C68; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #FDF8F3; }
+        ::-webkit-scrollbar-thumb { background: #D4848F; border-radius: 4px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+        .badge-high { background: linear-gradient(135deg, #FFE8E8, #FFCCD2); color: #B85C68; }
+        .badge-normal { background: linear-gradient(135deg, #E8EFE8, #C8DBC8); color: #4A7A4A; }
+        .badge-low { background: linear-gradient(135deg, #FFF3D6, #FFE4A8); color: #A67C00; }
+        .status-arastiriliyor { background: #FFF3D6; color: #A67C00; border: 1px solid #FFE4A8; }
+        .status-alindi { background: #E8EFE8; color: #4A7A4A; border: 1px solid #C8DBC8; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #D4848F; box-shadow: 0 0 0 3px rgba(212, 132, 143, 0.2); }
+        .sticky-footer { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,245,245,0.95)); backdrop-filter: blur(20px); border-top: 1px solid rgba(212, 132, 143, 0.3); }
+    </style>
+</head>
+<body class="font-sans text-slate-800 pb-24">
+    {% raw %}
+    <div id="app" v-cloak>
+        <!-- Header -->
+        <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-rose-100">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-lg">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="font-display text-2xl font-semibold text-slate-800">Yeni Yuva</h1>
+                            <p class="text-sm text-slate-500">Ev Eşyası Yönetim Sistemi</p>
+                        </div>
+                    </div>
+                    <div class="flex-1 max-w-md">
+                        <div class="relative">
+                            <input type="text" v-model="aramaMetni" @input="filtrele" placeholder="Ürün veya marka ara..." class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-rose-100 bg-white/70 text-sm focus:bg-white transition-all">
+                            <svg class="w-5 h-5 text-rose-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button @click="exportExcel" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sage-100 text-sage-600 hover:bg-sage-200 transition-all text-sm font-medium">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span class="hidden sm:inline">Excel</span>
+                        </button>
+                        <button @click="showDashboard = true" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-100 text-amber-600 hover:bg-amber-200 transition-all text-sm font-medium">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            <span class="hidden sm:inline">Dashboard</span>
+                        </button>
+                        <button @click="openAddModal" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-400 to-rose-500 text-white hover:from-rose-500 hover:to-rose-600 shadow-lg shadow-rose-200 transition-all text-sm font-medium">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span>Ürün Ekle</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-rose-50">
+                    <span class="text-xs font-medium text-slate-500 mr-2">Filtreler:</span>
+                    <select v-model="aktifFiltre.kategori" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
+                        <option value="">Tüm Kategoriler</option>
+                        <option v-for="k in kategoriler" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                    <select v-model="aktifFiltre.oda" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
+                        <option value="">Tüm Odalar</option>
+                        <option v-for="o in odalar" :key="o" :value="o">{{ o }}</option>
+                    </select>
+                    <select v-model="aktifFiltre.statu" @change="filtrele" class="px-3 py-1.5 rounded-lg border border-rose-100 bg-white text-sm">
+                        <option value="">Tüm Statüler</option>
+                        <option value="Araştırılıyor">🔍 Araştırılıyor</option>
+                        <option value="Alındı">✅ Alındı</option>
+                    </select>
+                    <button v-if="hasActiveFilters" @click="resetFilters" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 transition-all">Temizle</button>
+                    <span class="ml-auto text-sm text-slate-500">{{ filteredUrunler.length }} ürün</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 py-8">
+            <div v-if="filteredUrunler.length === 0 && !loading" class="text-center py-20">
+                <div class="w-24 h-24 mx-auto mb-6 rounded-full bg-rose-50 flex items-center justify-center">
+                    <svg class="w-12 h-12 text-rose-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                </div>
+                <h3 class="font-display text-xl text-slate-700 mb-2">Henüz ürün eklenmemiş</h3>
+                <p class="text-slate-500 mb-6">Yeni yuvanız için ilk ürünü ekleyerek başlayın</p>
+                <button @click="openAddModal" class="px-6 py-3 rounded-xl bg-gradient-to-r from-rose-400 to-rose-500 text-white font-medium shadow-lg shadow-rose-200 hover:shadow-xl transition-all">İlk Ürünü Ekle</button>
+            </div>
+            <div v-if="loading" class="text-center py-20">
+                <div class="w-16 h-16 mx-auto mb-4 border-4 border-rose-200 border-t-rose-500 rounded-full animate-spin"></div>
+                <p class="text-slate-500">Yükleniyor...</p>
+            </div>
+
+            <!-- Product Grid -->
+            <div v-if="filteredUrunler.length > 0" class="masonry-grid">
+                <div v-for="urun in filteredUrunler" :key="urun.id" class="masonry-item animate-fadeIn">
+                    <div class="card rounded-2xl overflow-hidden shadow-lg">
+                        <div class="relative group">
+                            <div class="aspect-[4/3] bg-gradient-to-br from-rose-50 to-sage-50 overflow-hidden">
+                                <img v-if="urun.resim_url" :src="urun.resim_url" :alt="urun.urun_adi" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" @error="$event.target.style.display='none'">
+                                <div v-else class="w-full h-full flex items-center justify-center">
+                                    <svg class="w-16 h-16 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                </div>
+                            </div>
+                            <div class="absolute top-3 left-3">
+                                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm cursor-pointer hover:bg-white transition-all">
+                                    <input type="checkbox" v-model="urun.secili" @change="hesaplaSeciliToplam" class="custom-checkbox">
+                                    <span class="text-xs font-medium text-slate-600">Hesaba Kat</span>
+                                </label>
+                            </div>
+                            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur shadow-sm">
+                                <span class="font-display font-semibold text-slate-800">{{ formatPrice(urun.fiyat) }} ₺</span>
+                            </div>
+                            <div class="absolute bottom-3 left-3">
+                                <span :class="urun.statu === 'Alındı' ? 'status-alindi' : 'status-arastiriliyor'" class="px-3 py-1 rounded-full text-xs font-medium">
+                                    {{ urun.statu === 'Alındı' ? '✅ Alındı' : '🔍 Araştırılıyor' }}
+                                </span>
+                            </div>
+                            <div class="absolute bottom-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button @click="toggleStatu(urun)" class="w-8 h-8 rounded-lg bg-white/90 backdrop-blur shadow-sm flex items-center justify-center hover:bg-sage-100 transition-all" :title="urun.statu === 'Alındı' ? 'Araştırılıyor yap' : 'Alındı yap'">
+                                    <svg class="w-4 h-4 text-sage-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex items-start justify-between gap-2 mb-2">
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-display font-medium text-slate-800 truncate">{{ urun.urun_adi }}</h3>
+                                    <p v-if="urun.marka" class="text-sm text-slate-500">{{ urun.marka }}</p>
+                                </div>
+                                <span :class="getPriorityClass(urun.oncelik)" class="px-2 py-0.5 rounded-md text-xs font-medium shrink-0">{{ urun.oncelik }}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-slate-500 mb-3 flex-wrap">
+                                <span class="px-2 py-0.5 rounded bg-slate-100">{{ urun.kategori }}</span>
+                                <span v-if="urun.alt_kategori && urun.alt_kategori !== 'Genel'" class="px-2 py-0.5 rounded bg-rose-50 text-rose-600">{{ urun.alt_kategori }}</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-100">{{ urun.oda }}</span>
+                            </div>
+                            
+                            <!-- Teknik Özellikler Özeti -->
+                            <div v-if="parseTeknik(urun.teknik_ozellikler)" class="mb-3 p-2 rounded-lg bg-slate-50 text-xs">
+                                <div class="grid grid-cols-2 gap-1">
+                                    <div v-for="(val, key) in getTopSpecs(urun.teknik_ozellikler)" :key="key" class="flex justify-between">
+                                        <span class="text-slate-500">{{ formatSpecName(key) }}:</span>
+                                        <span class="font-medium text-slate-700">{{ val }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <a v-if="urun.link" :href="urun.link" target="_blank" class="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 mb-3 truncate">
+                                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                <span class="truncate">{{ getDomain(urun.link) }}</span>
+                            </a>
+                            <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
+                                <button @click="editUrun(urun)" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 transition-all text-sm">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    Düzenle
+                                </button>
+                                <button @click="confirmDelete(urun)" class="flex items-center justify-center w-10 h-10 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sticky Footer -->
+        <div class="fixed bottom-0 left-0 right-0 z-50 sticky-footer">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2">
+                            <div class="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center">
+                                <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-slate-500">Seçili Ürünler</p>
+                                <p class="font-display font-semibold text-slate-800">{{ seciliUrunSayisi }} ürün</p>
+                            </div>
+                        </div>
+                        <div class="h-10 w-px bg-slate-200"></div>
+                        <div>
+                            <p class="text-xs text-slate-500">Seçili Toplam</p>
+                            <p class="font-display text-2xl font-bold text-rose-500">{{ formatPrice(seciliToplam) }} ₺</p>
+                        </div>
+                    </div>
+                    <button v-if="seciliUrunSayisi > 0" @click="temizleSecim" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all text-sm">Seçimi Temizle</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @click.self="closeModal">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-fadeIn">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-xl font-semibold text-slate-800">{{ editMode ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle' }}</h2>
+                        <button @click="closeModal" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <div v-if="!editMode" class="flex gap-2 mt-4">
+                        <button @click="eklemeMode = 'manuel'" :class="eklemeMode === 'manuel' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all">✏️ Manuel Giriş</button>
+                        <button @click="eklemeMode = 'otomatik'" :class="eklemeMode === 'otomatik' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="flex-1 py-2.5 rounded-xl font-medium text-sm transition-all">🔗 Link ile Otomatik</button>
+                    </div>
+                </div>
+                <div class="p-6 overflow-y-auto" style="max-height: calc(90vh - 200px);">
+                    <!-- Auto Scrape -->
+                    <div v-if="eklemeMode === 'otomatik' && !editMode" class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Ürün Linki</label>
+                        <div class="flex gap-2">
+                            <input v-model="scrapeUrl" type="url" placeholder="https://www.arcelik.com.tr/..." class="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            <button @click="scrapeProduct" :disabled="scraping" class="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-white font-medium text-sm hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 transition-all whitespace-nowrap">
+                                <span v-if="scraping">Çekiliyor...</span>
+                                <span v-else>Bilgileri Çek</span>
+                            </button>
+                        </div>
+                        <p v-if="scrapeError" class="mt-2 text-sm text-red-500">{{ scrapeError }}</p>
+                        <p v-if="scrapeSuccess" class="mt-2 text-sm text-sage-600">✓ Temel bilgiler çekildi! Teknik özellikleri aşağıdan manuel ekleyebilirsiniz.</p>
+                        <p class="mt-2 text-xs text-slate-400">💡 Not: Bazı siteler teknik özellikleri JavaScript ile yükler. Bu durumda temel bilgiler (ad, fiyat, resim) otomatik gelir, teknik özellikler manuel girilir.</p>
+                    </div>
+                    
+                    <form @submit.prevent="saveUrun" enctype="multipart/form-data">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Ürün Adı *</label>
+                                <input v-model="formData.urun_adi" type="text" required class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Marka</label>
+                                <input v-model="formData.marka" type="text" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Fiyat (₺)</label>
+                                <input v-model="formData.fiyat" type="number" step="0.01" min="0" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
+                                <select v-model="formData.kategori" @change="onKategoriChange" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                    <option v-for="k in kategoriler" :key="k" :value="k">{{ k }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Alt Kategori</label>
+                                <select v-model="formData.alt_kategori" @change="onAltKategoriChange" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                    <option v-for="ak in mevcutAltKategoriler" :key="ak" :value="ak">{{ ak }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Oda</label>
+                                <select v-model="formData.oda" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                    <option v-for="o in odalar" :key="o" :value="o">{{ o }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Statü</label>
+                                <select v-model="formData.statu" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                    <option value="Araştırılıyor">🔍 Araştırılıyor</option>
+                                    <option value="Alındı">✅ Alındı</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Öncelik</label>
+                                <select v-model="formData.oncelik" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                                    <option value="Yüksek">🔴 Yüksek</option>
+                                    <option value="Normal">🟡 Normal</option>
+                                    <option value="Düşük">🟢 Düşük</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Ürün Linki</label>
+                                <input v-model="formData.link" type="url" placeholder="https://..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Resim URL</label>
+                                <input v-model="formData.resim_url" type="url" placeholder="https://..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">veya Resim Yükle</label>
+                                <input type="file" ref="fileInput" @change="onFileChange" accept="image/*" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-rose-100 file:text-rose-600 file:text-sm file:font-medium">
+                            </div>
+                            
+                            <!-- Dinamik Teknik Alanlar -->
+                            <div v-if="dinamikAlanlar.length > 0" class="md:col-span-2 p-4 rounded-xl bg-gradient-to-br from-rose-50 to-amber-50 border border-rose-100">
+                                <h4 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                                    <span class="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs">📋</span>
+                                    Teknik Özellikler - {{ formData.alt_kategori || formData.kategori }}
+                                </h4>
+                                <p class="text-xs text-slate-500 mb-3">Bu alanlar ürün sayfasından manuel olarak kopyalanabilir.</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div v-for="alan in dinamikAlanlar" :key="alan">
+                                        <label class="block text-xs font-medium text-slate-600 mb-1">{{ formatSpecName(alan) }}</label>
+                                        <input v-model="formData[alan]" type="text" :placeholder="getPlaceholder(alan)" class="w-full px-3 py-2 rounded-lg border border-rose-200 bg-white text-sm focus:border-rose-400 focus:ring-2 focus:ring-rose-100">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Scrape'den gelen teknik özellikler -->
+                            <div v-if="Object.keys(scrapedSpecs).length > 0" class="md:col-span-2 p-4 rounded-xl bg-gradient-to-br from-sage-50 to-emerald-50 border border-sage-200">
+                                <h4 class="text-sm font-semibold text-sage-700 mb-3 flex items-center gap-2">
+                                    <span class="w-6 h-6 rounded-full bg-sage-500 text-white flex items-center justify-center text-xs">✓</span>
+                                    Otomatik Çekilen Özellikler ({{ Object.keys(scrapedSpecs).length }} adet)
+                                </h4>
+                                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                    <div v-for="(val, key) in scrapedSpecs" :key="key" class="flex flex-col p-2 rounded-lg bg-white/70">
+                                        <span class="text-xs text-slate-500">{{ formatSpecName(key) }}</span>
+                                        <span class="font-medium text-slate-800">{{ val }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Notlar</label>
+                                <textarea v-model="formData.notlar" rows="2" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm resize-none"></textarea>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 mt-6 pt-6 border-t border-slate-100">
+                            <button type="button" @click="closeModal" class="flex-1 px-6 py-3 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-all">İptal</button>
+                            <button type="submit" :disabled="saving" class="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-rose-400 to-rose-500 text-white font-medium shadow-lg shadow-rose-200 hover:from-rose-500 hover:to-rose-600 disabled:opacity-50 transition-all">
+                                {{ saving ? 'Kaydediliyor...' : (editMode ? 'Güncelle' : 'Kaydet') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Modal -->
+        <div v-if="showDashboard" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @click.self="showDashboard = false">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-fadeIn">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-xl font-semibold text-slate-800">📊 Bütçe Dashboard</h2>
+                        <button @click="showDashboard = false" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6 overflow-y-auto" style="max-height: calc(90vh - 120px);">
+                    <div class="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-100">
+                        <div class="flex items-center gap-4">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-amber-800 mb-1">Toplam Bütçe</label>
+                                <div class="flex gap-2">
+                                    <input v-model="dashboard.toplam_butce" type="number" step="1000" class="flex-1 px-4 py-2 rounded-xl border border-amber-200 bg-white text-lg font-semibold">
+                                    <button @click="updateButce" class="px-4 py-2 rounded-xl bg-amber-400 text-white font-medium hover:bg-amber-500 transition-all">Güncelle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <div class="p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-rose-100 border border-rose-200">
+                            <p class="text-xs text-rose-600 mb-1">Toplam Bütçe</p>
+                            <p class="font-display text-2xl font-bold text-rose-700">{{ formatPrice(dashboard.toplam_butce) }} ₺</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-gradient-to-br from-sage-50 to-sage-100 border border-sage-200">
+                            <p class="text-xs text-sage-600 mb-1">Harcanan</p>
+                            <p class="font-display text-2xl font-bold text-sage-700">{{ formatPrice(dashboard.harcanan_tutar) }} ₺</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200">
+                            <p class="text-xs text-amber-600 mb-1">Planlanan</p>
+                            <p class="font-display text-2xl font-bold text-amber-700">{{ formatPrice(dashboard.planlanan_tutar) }} ₺</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200">
+                            <p class="text-xs text-slate-600 mb-1">Kalan Bütçe</p>
+                            <p class="font-display text-2xl font-bold" :class="dashboard.kalan_butce >= 0 ? 'text-slate-700' : 'text-red-600'">{{ formatPrice(dashboard.kalan_butce) }} ₺</p>
+                        </div>
+                    </div>
+                    <div class="mb-8">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-slate-600">Bütçe Kullanımı</span>
+                            <span class="font-medium">{{ butceYuzdesi }}%</span>
+                        </div>
+                        <div class="h-4 rounded-full bg-slate-100 overflow-hidden">
+                            <div class="h-full rounded-full bg-gradient-to-r from-sage-400 to-sage-500 transition-all duration-500" :style="{ width: Math.min(butceYuzdesi, 100) + '%' }"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <h3 class="font-medium text-slate-700 mb-4">Kategorilere Göre</h3>
+                            <div class="space-y-3">
+                                <div v-for="k in dashboard.kategori_dagilim" :key="k.kategori" class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                                        <span class="text-sm text-slate-600">{{ k.kategori }}</span>
+                                        <span class="text-xs text-slate-400">({{ k.sayi }})</span>
+                                    </div>
+                                    <span class="text-sm font-medium text-slate-700">{{ formatPrice(k.toplam) }} ₺</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <h3 class="font-medium text-slate-700 mb-4">Odalara Göre</h3>
+                            <div class="space-y-3">
+                                <div v-for="o in dashboard.oda_dagilim" :key="o.oda" class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-sage-400"></span>
+                                        <span class="text-sm text-slate-600">{{ o.oda }}</span>
+                                        <span class="text-xs text-slate-400">({{ o.sayi }})</span>
+                                    </div>
+                                    <span class="text-sm font-medium text-slate-700">{{ formatPrice(o.toplam) }} ₺</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 rounded-2xl bg-rose-50 border border-rose-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-rose-600">Toplam Ürün</p>
+                                <p class="font-display text-3xl font-bold text-rose-700">{{ dashboard.toplam_urun }}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-sage-600">Alınan Ürün</p>
+                                <p class="font-display text-3xl font-bold text-sage-700">{{ dashboard.alinan_urun }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation -->
+        <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @click.self="showDeleteConfirm = false">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fadeIn">
+                <div class="text-center">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </div>
+                    <h3 class="font-display text-xl font-semibold text-slate-800 mb-2">Ürünü Sil</h3>
+                    <p class="text-slate-600 mb-6">"{{ deleteTarget?.urun_adi }}" ürününü silmek istediğinize emin misiniz?</p>
+                    <div class="flex gap-3">
+                        <button @click="showDeleteConfirm = false" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-all">İptal</button>
+                        <button @click="deleteUrun" class="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all">Sil</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div v-if="toast.show" class="fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-xl animate-fadeIn" :class="toast.type === 'success' ? 'bg-sage-500 text-white' : 'bg-red-500 text-white'">{{ toast.message }}</div>
+    </div>
+    {% endraw %}
+
+    <script>
+        const KATEGORILER = {{ kategoriler | tojson }};
+        const ODALAR = {{ odalar | tojson }};
+        const KATEGORI_ALANLARI = {{ kategori_alanlari | tojson }};
+        const ALT_KATEGORILER = {{ alt_kategoriler | tojson }};
+    </script>
+    
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+        
+        createApp({
+            setup() {
+                const urunler = ref([]);
+                const filteredUrunler = ref([]);
+                const loading = ref(true);
+                const saving = ref(false);
+                const scraping = ref(false);
+                
+                const kategoriler = ref(KATEGORILER);
+                const odalar = ref(ODALAR);
+                const kategoriAlanlari = ref(KATEGORI_ALANLARI);
+                const altKategoriler = ref(ALT_KATEGORILER);
+                
+                const showModal = ref(false);
+                const showDashboard = ref(false);
+                const showDeleteConfirm = ref(false);
+                const editMode = ref(false);
+                const eklemeMode = ref('manuel');
+                
+                const formData = ref({
+                    id: null, urun_adi: '', marka: '', fiyat: 0, link: '', resim_url: '',
+                    kategori: 'Beyaz Eşya', alt_kategori: 'Genel', oda: 'Salon',
+                    statu: 'Araştırılıyor', oncelik: 'Normal', notlar: ''
+                });
+                
+                const scrapeUrl = ref('');
+                const scrapeError = ref('');
+                const scrapeSuccess = ref(false);
+                const scrapedSpecs = ref({});
+                
+                const aktifFiltre = ref({ kategori: '', oda: '', statu: '' });
+                const aramaMetni = ref('');
+                
+                const dashboard = ref({
+                    toplam_butce: 100000, harcanan_tutar: 0, planlanan_tutar: 0,
+                    kalan_butce: 0, toplam_urun: 0, alinan_urun: 0,
+                    kategori_dagilim: [], oda_dagilim: []
+                });
+                
+                const deleteTarget = ref(null);
+                const toast = ref({ show: false, message: '', type: 'success' });
+                const fileInput = ref(null);
+                const selectedFile = ref(null);
+                const seciliToplam = ref(0);
+                
+                const seciliUrunSayisi = computed(() => urunler.value.filter(u => u.secili).length);
+                const hasActiveFilters = computed(() => aktifFiltre.value.kategori || aktifFiltre.value.oda || aktifFiltre.value.statu || aramaMetni.value);
+                const butceYuzdesi = computed(() => dashboard.value.toplam_butce === 0 ? 0 : Math.round((dashboard.value.harcanan_tutar / dashboard.value.toplam_butce) * 100));
+                
+                const mevcutAltKategoriler = computed(() => {
+                    const kat = formData.value.kategori;
+                    return altKategoriler.value[kat] || ['Genel'];
+                });
+                
+                const dinamikAlanlar = computed(() => {
+                    const kat = formData.value.kategori;
+                    const altKat = formData.value.alt_kategori || 'Genel';
+                    if (kategoriAlanlari.value[kat] && kategoriAlanlari.value[kat][altKat]) {
+                        return kategoriAlanlari.value[kat][altKat];
+                    }
+                    return [];
+                });
+                
+                const showToast = (message, type = 'success') => {
+                    toast.value = { show: true, message, type };
+                    setTimeout(() => { toast.value.show = false; }, 3000);
+                };
+                
+                const formatPrice = (price) => new Intl.NumberFormat('tr-TR').format(price || 0);
+                const getDomain = (url) => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } };
+                
+                const formatSpecName = (alan) => {
+                    const mapping = {
+                        'enerji_sinifi': 'Enerji Sınıfı', 'kapasite_kg': 'Kapasite (kg)', 'devir_sayisi': 'Devir/dk',
+                        'su_tuketimi_lt': 'Su Tüketimi (lt)', 'yillik_su_tuketimi_lt': 'Yıllık Su (lt)',
+                        'gurultu_db': 'Gürültü (dB)', 'gurultu_yikama_db': 'Yıkama Gürültüsü (dB)',
+                        'gurultu_sikma_db': 'Sıkma Gürültüsü (dB)', 'yikama_programlari': 'Program Sayısı',
+                        'garanti_suresi': 'Garanti', 'olculer': 'Ölçüler', 'kapasite_kisilik': 'Kapasite (kişilik)',
+                        'kurutma_sinifi': 'Kurutma Sınıfı', 'brut_hacim_lt': 'Brüt Hacim (lt)',
+                        'net_hacim_lt': 'Net Hacim (lt)', 'sogutma_tipi': 'Soğutma Tipi',
+                        'dondurucu_hacim_lt': 'Dondurucu (lt)', 'yillik_enerji_tuketimi_kwh': 'Yıllık Enerji (kWh)',
+                        'malzeme': 'Malzeme', 'kumas_tipi': 'Kumaş', 'renk': 'Renk',
+                        'kisi_kapasitesi': 'Kişi Kapasitesi', 'agirlik_kg': 'Ağırlık (kg)',
+                        'olculer_3lu': '3\'lü Koltuk', 'olculer_2li': '2\'li Koltuk', 'olculer_berjer': 'Berjer'
+                    };
+                    return mapping[alan] || alan.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                };
+                
+                const getPlaceholder = (alan) => {
+                    const placeholders = {
+                        'enerji_sinifi': 'Örn: A, A+, A++, A+++',
+                        'kapasite_kg': 'Örn: 9',
+                        'devir_sayisi': 'Örn: 1400',
+                        'su_tuketimi_lt': 'Örn: 52',
+                        'yillik_su_tuketimi_lt': 'Örn: 10500',
+                        'gurultu_db': 'Örn: 45',
+                        'gurultu_yikama_db': 'Örn: 48',
+                        'gurultu_sikma_db': 'Örn: 72',
+                        'olculer': 'Örn: 60x85x60 cm',
+                        'garanti_suresi': 'Örn: 3 yıl',
+                        'malzeme': 'Örn: Ahşap, Metal, Kumaş',
+                        'brut_hacim_lt': 'Örn: 560',
+                        'net_hacim_lt': 'Örn: 508',
+                        'sogutma_tipi': 'Örn: No Frost',
+                        'dondurucu_hacim_lt': 'Örn: 150',
+                        'yillik_enerji_tuketimi_kwh': 'Örn: 295',
+                        'kapasite_kisilik': 'Örn: 14',
+                        'kurutma_sinifi': 'Örn: A',
+                        'yikama_programlari': 'Örn: 15',
+                        'kumas_tipi': 'Örn: Kadife, Keten',
+                        'renk': 'Örn: Gri, Bej',
+                        'kisi_kapasitesi': 'Örn: 5-6 kişilik',
+                        'olculer_3lu': 'Örn: 230x95x85 cm',
+                        'olculer_2li': 'Örn: 175x95x85 cm',
+                        'olculer_berjer': 'Örn: 85x90x85 cm',
+                        'agirlik_kg': 'Örn: 45'
+                    };
+                    return placeholders[alan] || '';
+                };
+                
+                const getPriorityClass = (oncelik) => ({ 'Yüksek': 'badge-high', 'Normal': 'badge-normal', 'Düşük': 'badge-low' }[oncelik] || 'badge-normal');
+                
+                const parseTeknik = (teknikStr) => {
+                    if (!teknikStr) return null;
+                    try { const t = JSON.parse(teknikStr); return Object.keys(t).length > 0 ? t : null; } catch { return null; }
+                };
+                
+                const getTopSpecs = (teknikStr) => {
+                    const t = parseTeknik(teknikStr);
+                    if (!t) return {};
+                    const entries = Object.entries(t).slice(0, 4);
+                    return Object.fromEntries(entries);
+                };
+                
+                const fetchUrunler = async () => {
+                    loading.value = true;
+                    try {
+                        const params = new URLSearchParams();
+                        if (aktifFiltre.value.kategori) params.append('kategori', aktifFiltre.value.kategori);
+                        if (aktifFiltre.value.oda) params.append('oda', aktifFiltre.value.oda);
+                        if (aktifFiltre.value.statu) params.append('statu', aktifFiltre.value.statu);
+                        if (aramaMetni.value) params.append('arama', aramaMetni.value);
+                        const res = await fetch(`/api/urunler?${params}`);
+                        const data = await res.json();
+                        urunler.value = data.map(u => ({ ...u, secili: false }));
+                        filteredUrunler.value = urunler.value;
+                    } catch (e) { console.error('Fetch error:', e); }
+                    loading.value = false;
+                };
+                
+                const fetchDashboard = async () => {
+                    try {
+                        const res = await fetch('/api/dashboard');
+                        dashboard.value = await res.json();
+                    } catch (e) { console.error('Dashboard error:', e); }
+                };
+                
+                const filtrele = () => fetchUrunler();
+                const resetFilters = () => { aktifFiltre.value = { kategori: '', oda: '', statu: '' }; aramaMetni.value = ''; fetchUrunler(); };
+                const hesaplaSeciliToplam = () => { seciliToplam.value = urunler.value.filter(u => u.secili).reduce((sum, u) => sum + (parseFloat(u.fiyat) || 0), 0); };
+                const temizleSecim = () => { urunler.value.forEach(u => u.secili = false); seciliToplam.value = 0; };
+                
+                const openAddModal = () => {
+                    editMode.value = false;
+                    eklemeMode.value = 'manuel';
+                    formData.value = { id: null, urun_adi: '', marka: '', fiyat: 0, link: '', resim_url: '', kategori: 'Beyaz Eşya', alt_kategori: 'Genel', oda: 'Salon', statu: 'Araştırılıyor', oncelik: 'Normal', notlar: '' };
+                    scrapeUrl.value = '';
+                    scrapeError.value = '';
+                    scrapeSuccess.value = false;
+                    scrapedSpecs.value = {};
+                    selectedFile.value = null;
+                    showModal.value = true;
+                };
+                
+                const editUrun = async (urun) => {
+                    editMode.value = true;
+                    try {
+                        const res = await fetch(`/api/urunler/${urun.id}`);
+                        const data = await res.json();
+                        formData.value = { ...data };
+                        if (data.teknik_ozellikler) {
+                            const teknik = JSON.parse(data.teknik_ozellikler);
+                            Object.assign(formData.value, teknik);
+                        }
+                    } catch (e) { formData.value = { ...urun }; }
+                    scrapedSpecs.value = {};
+                    selectedFile.value = null;
+                    showModal.value = true;
+                };
+                
+                const closeModal = () => { showModal.value = false; editMode.value = false; };
+                const onKategoriChange = () => { formData.value.alt_kategori = mevcutAltKategoriler.value[0] || 'Genel'; };
+                const onAltKategoriChange = () => {};
+                const onFileChange = (e) => { selectedFile.value = e.target.files[0]; };
+                
+                const scrapeProduct = async () => {
+                    if (!scrapeUrl.value) return;
+                    scraping.value = true;
+                    scrapeError.value = '';
+                    scrapeSuccess.value = false;
+                    scrapedSpecs.value = {};
+                    
+                    try {
+                        const res = await fetch('/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: scrapeUrl.value }) });
+                        const result = await res.json();
+                        
+                        if (result.success) {
+                            formData.value.urun_adi = result.data.urun_adi || '';
+                            formData.value.marka = result.data.marka || '';
+                            formData.value.fiyat = result.data.fiyat || 0;
+                            formData.value.resim_url = result.data.resim_url || '';
+                            formData.value.link = result.data.link || scrapeUrl.value;
+                            
+                            // Kategori tahmini varsa uygula
+                            if (result.data.kategori_tahmini) {
+                                formData.value.kategori = result.data.kategori_tahmini;
+                                // Alt kategoriyi de ayarla
+                                if (result.data.alt_kategori_tahmini) {
+                                    setTimeout(() => {
+                                        formData.value.alt_kategori = result.data.alt_kategori_tahmini;
+                                    }, 100);
+                                }
+                            }
+                            
+                            if (result.data.teknik_ozellikler) {
+                                scrapedSpecs.value = result.data.teknik_ozellikler;
+                                Object.assign(formData.value, result.data.teknik_ozellikler);
+                            }
+                            scrapeSuccess.value = true;
+                        } else {
+                            scrapeError.value = result.error || 'Bilgiler çekilemedi';
+                        }
+                    } catch (e) { scrapeError.value = 'Bağlantı hatası: ' + e.message; }
+                    scraping.value = false;
+                };
+                
+                const saveUrun = async () => {
+                    saving.value = true;
+                    try {
+                        const fd = new FormData();
+                        Object.keys(formData.value).forEach(key => {
+                            if (formData.value[key] !== null && formData.value[key] !== undefined) {
+                                fd.append(key, formData.value[key]);
+                            }
+                        });
+                        if (Object.keys(scrapedSpecs.value).length > 0) {
+                            fd.append('teknik_ozellikler_json', JSON.stringify(scrapedSpecs.value));
+                        }
+                        if (selectedFile.value) fd.append('resim_dosya', selectedFile.value);
+                        
+                        const url = editMode.value ? `/api/urunler/${formData.value.id}` : '/api/urunler';
+                        const method = editMode.value ? 'PUT' : 'POST';
+                        const res = await fetch(url, { method, body: fd });
+                        const result = await res.json();
+                        
+                        if (result.success) { showToast(result.message); closeModal(); fetchUrunler(); fetchDashboard(); }
+                        else { showToast(result.error || 'Hata oluştu', 'error'); }
+                    } catch (e) { showToast('Kaydetme hatası', 'error'); }
+                    saving.value = false;
+                };
+                
+                const confirmDelete = (urun) => { deleteTarget.value = urun; showDeleteConfirm.value = true; };
+                
+                const deleteUrun = async () => {
+                    try {
+                        const res = await fetch(`/api/urunler/${deleteTarget.value.id}`, { method: 'DELETE' });
+                        const result = await res.json();
+                        if (result.success) { showToast('Ürün silindi'); fetchUrunler(); fetchDashboard(); }
+                    } catch (e) { showToast('Silme hatası', 'error'); }
+                    showDeleteConfirm.value = false;
+                    deleteTarget.value = null;
+                };
+                
+                const toggleStatu = async (urun) => {
+                    const yeniStatu = urun.statu === 'Alındı' ? 'Araştırılıyor' : 'Alındı';
+                    try {
+                        await fetch(`/api/statu/${urun.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ statu: yeniStatu }) });
+                        urun.statu = yeniStatu;
+                        fetchDashboard();
+                        showToast(`Statü "${yeniStatu}" olarak güncellendi`);
+                    } catch (e) { showToast('Güncelleme hatası', 'error'); }
+                };
+                
+                const updateButce = async () => {
+                    try {
+                        await fetch('/api/butce', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toplam_butce: dashboard.value.toplam_butce }) });
+                        fetchDashboard();
+                        showToast('Bütçe güncellendi');
+                    } catch (e) { showToast('Güncelleme hatası', 'error'); }
+                };
+                
+                const exportExcel = () => { window.location.href = '/api/export/excel'; };
+                
+                onMounted(() => { fetchUrunler(); fetchDashboard(); });
+                
+                return {
+                    urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
+                    showModal, showDashboard, showDeleteConfirm, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
+                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi,
+                    hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, butceYuzdesi,
+                    showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
+                    fetchUrunler, fetchDashboard, filtrele, resetFilters, hesaplaSeciliToplam, temizleSecim,
+                    openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange,
+                    scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
