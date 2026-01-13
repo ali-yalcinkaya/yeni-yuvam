@@ -7,6 +7,7 @@ import os
 import re
 import json
 import sqlite3
+import base64
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
@@ -14,6 +15,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import requests
 from io import BytesIO
+from PIL import Image
 
 # Flask App Configuration
 app = Flask(__name__)
@@ -214,6 +216,7 @@ def init_db():
             fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             link TEXT,
             resim_url TEXT,
+            resim_base64 TEXT,
             kategori TEXT DEFAULT 'Diğer',
             alt_kategori TEXT DEFAULT 'Genel',
             oda TEXT DEFAULT 'Salon',
@@ -265,9 +268,82 @@ def init_db():
         print("→ Migration: fiyat_guncelleme_tarihi sütunu ekleniyor...")
         cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
+    try:
+        cursor.execute("SELECT resim_base64 FROM urunler LIMIT 1")
+    except sqlite3.OperationalError:
+        print("→ Migration: resim_base64 sütunu ekleniyor...")
+        cursor.execute("ALTER TABLE urunler ADD COLUMN resim_base64 TEXT DEFAULT NULL")
+
     conn.commit()
     conn.close()
     print("✓ Veritabanı başlatıldı")
+
+def image_url_to_base64(url, max_size=(800, 800)):
+    """Resim URL'sini base64'e çevirir, boyutunu küçültür"""
+    try:
+        if not url or url.startswith('data:'):
+            return None
+
+        # Resmi indir
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        if response.status_code != 200:
+            return None
+
+        # PIL ile resmi aç ve boyutlandır
+        img = Image.open(BytesIO(response.content))
+
+        # RGBA ise RGB'ye çevir
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+
+        # Boyutlandır (aspect ratio koru)
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # WebP formatında kaydet (daha küçük boyut)
+        buffer = BytesIO()
+        img.save(buffer, format='WEBP', quality=85, optimize=True)
+        buffer.seek(0)
+
+        # Base64'e çevir
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f'data:image/webp;base64,{img_base64}'
+
+    except Exception as e:
+        print(f"Resim base64'e çevrilemedi ({url}): {e}")
+        return None
+
+def file_to_base64(file_path, max_size=(800, 800)):
+    """Upload edilmiş dosyayı base64'e çevirir"""
+    try:
+        img = Image.open(file_path)
+
+        # RGBA ise RGB'ye çevir
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+
+        # Boyutlandır
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # WebP formatında kaydet
+        buffer = BytesIO()
+        img.save(buffer, format='WEBP', quality=85, optimize=True)
+        buffer.seek(0)
+
+        # Base64'e çevir
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f'data:image/webp;base64,{img_base64}'
+
+    except Exception as e:
+        print(f"Dosya base64'e çevrilemedi: {e}")
+        return None
 
 # ============================================
 # WEB SCRAPING - SİTEYE ÖZEL FONKSİYONLAR
@@ -372,29 +448,53 @@ def scrape_arcelik(url, soup):
                     # Eğer resize parametresi yoksa ekle
                     if '/resize/' not in src:
                         src = src.replace('/media/', '/media/resize/')
+
+                    # Webp formatına çevir (image.png veya image.jpg varsa değiştir)
+                    if '/image.png' in src:
+                        src = src.replace('/image.png', '/image.webp')
+                    elif '/image.jpg' in src or '/image.jpeg' in src:
+                        src = src.replace('/image.jpg', '/image.webp').replace('/image.jpeg', '/image.webp')
+
+                    # Eğer henüz 1000Wx1000H formatı yoksa ekle
+                    if '/1000Wx1000H/' not in src:
                         # Dosya uzantısını bul ve webp formatına çevir
-                        if '.png' in src.lower():
+                        if '.png' in src.lower() and '/image.webp' not in src:
                             src = src.replace('.png', '.png/1000Wx1000H/image.webp', 1)
                             src = src.replace('.PNG', '.PNG/1000Wx1000H/image.webp', 1)
-                        elif '.jpg' in src.lower() or '.jpeg' in src.lower():
+                        elif ('.jpg' in src.lower() or '.jpeg' in src.lower()) and '/image.webp' not in src:
                             if '.jpg' in src:
                                 src = src.replace('.jpg', '.jpg/1000Wx1000H/image.webp', 1)
                             elif '.JPG' in src:
                                 src = src.replace('.JPG', '.JPG/1000Wx1000H/image.webp', 1)
                             elif '.jpeg' in src:
                                 src = src.replace('.jpeg', '.jpeg/1000Wx1000H/image.webp', 1)
-                        elif '.webp' in src.lower():
-                            if '/1000Wx1000H/' not in src:
-                                src = src.replace('.webp', '.webp/1000Wx1000H/image.webp', 1)
+                        elif '.webp' in src.lower() and '/1000Wx1000H/' not in src:
+                            src = src.replace('.webp', '.webp/1000Wx1000H/image.webp', 1)
 
                 data['resim_url'] = src
                 break
-    
+
     # OG image fallback
     if not data['resim_url']:
         og_img = soup.find('meta', property='og:image')
         if og_img:
-            data['resim_url'] = og_img.get('content', '')
+            src = og_img.get('content', '')
+            # Protokol düzeltmeleri
+            if src.startswith('//'):
+                src = 'https:' + src
+            elif src.startswith('/'):
+                src = 'https://www.arcelik.com.tr' + src
+            elif src.startswith('www.'):
+                src = 'https://' + src
+
+            # Arçelik için webp optimizasyonu
+            if 'arcelik.com.tr' in src:
+                if '/image.png' in src:
+                    src = src.replace('/image.png', '/image.webp')
+                elif '/image.jpg' in src:
+                    src = src.replace('/image.jpg', '/image.webp')
+
+            data['resim_url'] = src
     
     # Teknik özellikler - Arçelik'in spec tablosu
     specs = {}
@@ -843,8 +943,10 @@ def add_urun():
     try:
         data = request.form.to_dict()
         
-        # Dosya upload kontrolü
+        # Dosya upload kontrolü ve base64 dönüşümü
         resim_url = data.get('resim_url', '')
+        resim_base64 = None
+
         if 'resim_dosya' in request.files:
             file = request.files['resim_dosya']
             if file and file.filename and allowed_file(file.filename):
@@ -854,7 +956,12 @@ def add_urun():
                 filepath = os.path.join(ensure_upload_folder(), filename)
                 file.save(filepath)
                 resim_url = f'/static/uploads/{filename}'
-        
+                # Dosyayı base64'e çevir
+                resim_base64 = file_to_base64(filepath)
+        elif resim_url and resim_url.startswith('http'):
+            # URL'den resmi base64'e çevir
+            resim_base64 = image_url_to_base64(resim_url)
+
         # Teknik özellikler JSON olarak
         teknik = {}
         kategori = data.get('kategori', 'Diğer')
@@ -882,8 +989,8 @@ def add_urun():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO urunler (urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi, link, resim_url, kategori, alt_kategori, oda, statu, oncelik, teknik_ozellikler, notlar)
-            VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO urunler (urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi, link, resim_url, resim_base64, kategori, alt_kategori, oda, statu, oncelik, teknik_ozellikler, notlar)
+            VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('urun_adi', 'İsimsiz Ürün'),
             data.get('marka', ''),
@@ -891,6 +998,7 @@ def add_urun():
             indirimli_fiyat,
             data.get('link', ''),
             resim_url,
+            resim_base64,
             kategori,
             alt_kategori,
             data.get('oda', 'Salon'),
@@ -938,8 +1046,10 @@ def update_urun(id):
             conn.close()
             return jsonify({'error': 'Ürün bulunamadı'}), 404
         
-        # Dosya upload kontrolü
+        # Dosya upload kontrolü ve base64 dönüşümü
         resim_url = data.get('resim_url', urun['resim_url'])
+        resim_base64 = urun.get('resim_base64')  # Mevcut base64'ü koru
+
         if 'resim_dosya' in request.files:
             file = request.files['resim_dosya']
             if file and file.filename and allowed_file(file.filename):
@@ -949,7 +1059,12 @@ def update_urun(id):
                 filepath = os.path.join(ensure_upload_folder(), filename)
                 file.save(filepath)
                 resim_url = f'/static/uploads/{filename}'
-        
+                # Dosyayı base64'e çevir
+                resim_base64 = file_to_base64(filepath)
+        elif resim_url != urun['resim_url'] and resim_url and resim_url.startswith('http'):
+            # Yeni URL girilmişse, resmi base64'e çevir
+            resim_base64 = image_url_to_base64(resim_url)
+
         # Teknik özellikler
         teknik = {}
         kategori = data.get('kategori', urun['kategori'])
@@ -979,7 +1094,7 @@ def update_urun(id):
 
         cursor.execute(f'''
             UPDATE urunler SET
-                urun_adi = ?, marka = ?, fiyat = ?, indirimli_fiyat = ?, link = ?, resim_url = ?,
+                urun_adi = ?, marka = ?, fiyat = ?, indirimli_fiyat = ?, link = ?, resim_url = ?, resim_base64 = ?,
                 kategori = ?, alt_kategori = ?, oda = ?, statu = ?, oncelik = ?,
                 teknik_ozellikler = ?, notlar = ?, updated_at = CURRENT_TIMESTAMP
                 {fiyat_guncelleme_sql}
@@ -991,6 +1106,7 @@ def update_urun(id):
             indirimli_fiyat,
             data.get('link', urun['link']),
             resim_url,
+            resim_base64,
             kategori,
             alt_kategori,
             data.get('oda', urun['oda']),

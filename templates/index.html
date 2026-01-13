@@ -166,7 +166,7 @@
                     <div class="card rounded-2xl overflow-hidden shadow-lg" :class="{'ring-4 ring-green-500 bg-green-50/30': urun.secili}">
                         <div class="relative group">
                             <div class="aspect-square sm:aspect-[4/3] bg-gradient-to-br from-rose-50 to-sage-50 overflow-hidden">
-                                <img v-if="urun.resim_url" :src="urun.resim_url" :alt="urun.urun_adi" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" @error="$event.target.style.display='none'">
+                                <img v-if="urun.resim_base64 || urun.resim_url" :src="urun.resim_base64 || urun.resim_url" :alt="urun.urun_adi" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" @error="$event.target.style.display='none'">
                                 <div v-else class="w-full h-full flex items-center justify-center">
                                     <svg class="w-12 h-12 sm:w-16 sm:h-16 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                 </div>
@@ -573,7 +573,7 @@
                             <tr class="border-b-2 border-slate-200">
                                 <th class="text-left py-3 px-4 font-semibold text-slate-700 sticky left-0 bg-white">Özellik</th>
                                 <th v-for="urun in compareProducts" :key="urun.id" class="py-3 px-4 text-center min-w-[200px]">
-                                    <img v-if="urun.resim_url" :src="urun.resim_url" :alt="urun.urun_adi" class="w-20 h-20 mx-auto object-cover rounded-lg mb-2">
+                                    <img v-if="urun.resim_base64 || urun.resim_url" :src="urun.resim_base64 || urun.resim_url" :alt="urun.urun_adi" class="w-20 h-20 mx-auto object-cover rounded-lg mb-2">
                                     <p class="font-semibold">{{ urun.urun_adi }}</p>
                                     <p class="text-xs text-slate-500">{{ urun.marka }}</p>
                                 </th>
@@ -609,7 +609,7 @@
                             <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
-                    <p class="text-sm text-slate-500 mt-2">Yeni eviniz için ihtiyacınız olan ürünleri kontrol edin ve ekleyin</p>
+                    <p class="text-sm text-slate-500 mt-2">Yeni eviniz için ihtiyacınız olan ürünleri kontrol edin</p>
                 </div>
                 <div class="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
                     <div v-for="(group, groupName) in checklistTemplate" :key="groupName" class="mb-6">
@@ -621,11 +621,11 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div v-for="(item, idx) in group.items" :key="idx"
                                  class="flex items-center gap-3 p-3 rounded-xl border transition-all"
-                                 :class="isItemInList(item.name) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'">
+                                 :class="isItemInList(item.name) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'">
                                 <input type="checkbox"
                                        :checked="isItemInList(item.name)"
-                                       @change="toggleItemCheck(item)"
-                                       class="w-5 h-5 rounded border-2 text-sage-500 focus:ring-sage-500">
+                                       disabled
+                                       class="w-5 h-5 rounded border-2 text-sage-500">
                                 <div class="flex-1">
                                     <div class="font-medium text-sm" :class="isItemInList(item.name) ? 'text-green-700 line-through' : 'text-slate-700'">
                                         {{ item.name }}
@@ -636,11 +636,6 @@
                                         <span :class="getPriorityClass(item.priority)">{{ item.priority }}</span>
                                     </div>
                                 </div>
-                                <button v-if="!isItemInList(item.name)"
-                                        @click="addItemFromChecklist(item)"
-                                        class="px-3 py-1.5 rounded-lg bg-sage-500 text-white text-xs font-medium hover:bg-sage-600 transition-all">
-                                    + Ekle
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1246,7 +1241,7 @@
                     openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange, onJSONFileChange,
                     scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
                     backupJSON, restoreJSONClick, compareSelected, getAllSpecKeys, getSpecValue,
-                    isItemInList, toggleItemCheck, addItemFromChecklist, getCheckedCount, getTotalCheckedCount, getTotalItemsCount,
+                    isItemInList, getCheckedCount, getTotalCheckedCount, getTotalItemsCount,
                     fetchPriceHistory, formatDate, getPriceChange, getPriceChangeClass
                 };
             }
