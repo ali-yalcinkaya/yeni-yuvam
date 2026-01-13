@@ -17,7 +17,7 @@ from io import BytesIO
 
 # Flask App Configuration
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'ev-esyasi-gizli-anahtar-2024'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ev-esyasi-gizli-anahtar-2024-CHANGE-IN-PRODUCTION')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -92,6 +92,93 @@ ODALAR = ['Salon', 'Yatak Odası', 'Mutfak', 'Banyo', 'Çocuk Odası', 'Çalış
 # Alt kategori listesi (frontend için)
 ALT_KATEGORILER = {k: list(v.keys()) for k, v in KATEGORI_ALANLARI.items()}
 
+# Eksik Ürünler Şablonu - Yeni evlenecek çiftler için temel ihtiyaçlar
+EKSIK_URUNLER_SABLONU = {
+    'Mutfak Temel İhtiyaçlar': {
+        'icon': '🍳',
+        'items': [
+            {'name': 'Çamaşır Makinesi', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Bulaşık Makinesi', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Buzdolabı', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Ocak/Fırın', 'category': 'Beyaz Eşya', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Mikrodalga Fırın', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Çay Makinesi', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Tost Makinesi', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Düşük'},
+            {'name': 'Blender/Doğrayıcı', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Yemek Takımı (24 parça)', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Tencere Seti', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Tava Seti', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'},
+            {'name': 'Çatal Bıçak Takımı', 'category': 'Mutfak Eşyaları', 'room': 'Mutfak', 'priority': 'Yüksek'}
+        ]
+    },
+    'Yatak Odası Temel İhtiyaçlar': {
+        'icon': '🛏️',
+        'items': [
+            {'name': 'Yatak (Baza + Yatak)', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Gardrop/Dolap', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Şifonyer', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Normal'},
+            {'name': 'Çarşaf Takımı (2-3 adet)', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yorgan (Kış+Yaz)', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yastık Seti', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Yüksek'},
+            {'name': 'Yatak Örtüsü', 'category': 'Tekstil', 'room': 'Yatak Odası', 'priority': 'Normal'},
+            {'name': 'Komodin', 'category': 'Mobilya', 'room': 'Yatak Odası', 'priority': 'Düşük'},
+            {'name': 'Abajur', 'category': 'Aydınlatma', 'room': 'Yatak Odası', 'priority': 'Düşük'}
+        ]
+    },
+    'Salon Temel İhtiyaçlar': {
+        'icon': '🛋️',
+        'items': [
+            {'name': 'Koltuk Takımı (3+2+1)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'TV Ünitesi', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Televizyon', 'category': 'Elektronik', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Orta Sehpa', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Zigon Sehpa', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Düşük'},
+            {'name': 'Halı', 'category': 'Dekorasyon', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Perde', 'category': 'Tekstil', 'room': 'Salon', 'priority': 'Normal'},
+            {'name': 'Avize/Aydınlatma', 'category': 'Aydınlatma', 'room': 'Salon', 'priority': 'Yüksek'}
+        ]
+    },
+    'Banyo Temel İhtiyaçlar': {
+        'icon': '🚿',
+        'items': [
+            {'name': 'Havlu Seti (4-6 adet)', 'category': 'Tekstil', 'room': 'Banyo', 'priority': 'Yüksek'},
+            {'name': 'Çamaşır Sepeti', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Banyo Dolabı/Aynası', 'category': 'Mobilya', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Duş Perdesi', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Banyo Paspası', 'category': 'Tekstil', 'room': 'Banyo', 'priority': 'Normal'},
+            {'name': 'Çöp Kovası', 'category': 'Banyo Aksesuarları', 'room': 'Banyo', 'priority': 'Normal'}
+        ]
+    },
+    'Yemek Odası': {
+        'icon': '🍽️',
+        'items': [
+            {'name': 'Yemek Masası (4-6 kişilik)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'Yemek Sandalyeleri (4-6 adet)', 'category': 'Mobilya', 'room': 'Salon', 'priority': 'Yüksek'},
+            {'name': 'Masa Örtüsü', 'category': 'Tekstil', 'room': 'Salon', 'priority': 'Düşük'},
+            {'name': 'Mutfak Dolabı', 'category': 'Mobilya', 'room': 'Mutfak', 'priority': 'Normal'}
+        ]
+    },
+    'Temizlik Araçları': {
+        'icon': '🧹',
+        'items': [
+            {'name': 'Süpürge (Elektrikli)', 'category': 'Küçük Ev Aletleri', 'room': 'Diğer', 'priority': 'Yüksek'},
+            {'name': 'Ütü + Ütü Masası', 'category': 'Küçük Ev Aletleri', 'room': 'Diğer', 'priority': 'Yüksek'},
+            {'name': 'Paspas/Süpürge Seti', 'category': 'Temizlik', 'room': 'Diğer', 'priority': 'Normal'},
+            {'name': 'Kova/Fırça Seti', 'category': 'Temizlik', 'room': 'Diğer', 'priority': 'Normal'}
+        ]
+    },
+    'Küçük Aksesuarlar': {
+        'icon': '🔧',
+        'items': [
+            {'name': 'Çöp Kovası (Mutfak)', 'category': 'Diğer', 'room': 'Mutfak', 'priority': 'Normal'},
+            {'name': 'Askılık', 'category': 'Mobilya', 'room': 'Antre', 'priority': 'Normal'},
+            {'name': 'Ayakkabılık', 'category': 'Mobilya', 'room': 'Antre', 'priority': 'Normal'},
+            {'name': 'Priz/Çoklayıcı', 'category': 'Elektronik', 'room': 'Diğer', 'priority': 'Normal'},
+            {'name': 'Çaydanlık', 'category': 'Küçük Ev Aletleri', 'room': 'Mutfak', 'priority': 'Yüksek'}
+        ]
+    }
+}
+
 # Klasör kontrolü ve oluşturma
 def ensure_upload_folder():
     """Upload klasörünü kontrol et ve yoksa oluştur"""
@@ -152,6 +239,18 @@ def init_db():
     cursor.execute('SELECT COUNT(*) FROM butce')
     if cursor.fetchone()[0] == 0:
         cursor.execute('INSERT INTO butce (id, toplam_butce) VALUES (1, 100000)')
+
+    # Fiyat geçmişi tablosu
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS fiyat_gecmisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            urun_id INTEGER NOT NULL,
+            fiyat REAL NOT NULL,
+            indirimli_fiyat REAL,
+            kayit_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (urun_id) REFERENCES urunler(id) ON DELETE CASCADE
+        )
+    ''')
 
     # Migration: Yeni sütunları ekle (eğer yoksa)
     try:
@@ -800,10 +899,18 @@ def add_urun():
             json.dumps(teknik, ensure_ascii=False),
             data.get('notlar', '')
         ))
-        conn.commit()
         new_id = cursor.lastrowid
+
+        # İlk fiyatı geçmişe kaydet
+        if fiyat > 0:
+            cursor.execute('''
+                INSERT INTO fiyat_gecmisi (urun_id, fiyat, indirimli_fiyat)
+                VALUES (?, ?, ?)
+            ''', (new_id, fiyat, indirimli_fiyat))
+
+        conn.commit()
         conn.close()
-        
+
         return jsonify({'success': True, 'id': new_id, 'message': 'Ürün başarıyla eklendi!'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -859,12 +966,17 @@ def update_urun(id):
         indirimli_fiyat = data.get('indirimli_fiyat', '')
         indirimli_fiyat = float(indirimli_fiyat) if indirimli_fiyat else None
 
-        # Fiyat değiştiyse güncelleme tarihini yenile
+        # Fiyat değiştiyse güncelleme tarihini yenile ve geçmişe kaydet
         fiyat_guncelleme_sql = ''
+        cursor = conn.cursor()
         if fiyat != urun['fiyat'] or indirimli_fiyat != urun.get('indirimli_fiyat'):
             fiyat_guncelleme_sql = ", fiyat_guncelleme_tarihi = datetime('now')"
+            # Fiyat geçmişine kaydet
+            cursor.execute('''
+                INSERT INTO fiyat_gecmisi (urun_id, fiyat, indirimli_fiyat)
+                VALUES (?, ?, ?)
+            ''', (id, fiyat, indirimli_fiyat))
 
-        cursor = conn.cursor()
         cursor.execute(f'''
             UPDATE urunler SET
                 urun_adi = ?, marka = ?, fiyat = ?, indirimli_fiyat = ?, link = ?, resim_url = ?,
@@ -1245,6 +1357,164 @@ def toggle_statu(id):
 def get_kategori_alanlari():
     """Kategori alanlarını döndür"""
     return jsonify(KATEGORI_ALANLARI)
+
+@app.route('/api/eksik-urunler-sablonu', methods=['GET'])
+def get_eksik_urunler_sablonu():
+    """Eksik ürünler şablonunu döndür"""
+    return jsonify(EKSIK_URUNLER_SABLONU)
+
+@app.route('/api/urunler/<int:id>/fiyat-gecmisi', methods=['GET'])
+def get_fiyat_gecmisi(id):
+    """Ürünün fiyat geçmişini döndür"""
+    try:
+        conn = get_db_connection()
+        gecmis = conn.execute('''
+            SELECT fiyat, indirimli_fiyat, kayit_tarihi
+            FROM fiyat_gecmisi
+            WHERE urun_id = ?
+            ORDER BY kayit_tarihi DESC
+            LIMIT 50
+        ''', (id,)).fetchall()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'history': [dict(row) for row in gecmis]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/backup/json', methods=['GET'])
+def backup_json():
+    """Tüm veritabanını JSON olarak yedekle"""
+    try:
+        conn = get_db_connection()
+
+        # Ürünleri çek
+        urunler = conn.execute('SELECT * FROM urunler ORDER BY id').fetchall()
+        urunler_list = [dict(row) for row in urunler]
+
+        # Bütçeyi çek
+        butce = conn.execute('SELECT * FROM butce WHERE id = 1').fetchone()
+        butce_dict = dict(butce) if butce else {'toplam_butce': 0}
+
+        conn.close()
+
+        # JSON yapısı oluştur
+        backup_data = {
+            'backup_date': datetime.now().isoformat(),
+            'version': '1.0',
+            'butce': butce_dict,
+            'urunler': urunler_list
+        }
+
+        # JSON dosyası oluştur
+        filename = f'yeni_yuva_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+
+        return jsonify({
+            'success': True,
+            'data': backup_data,
+            'filename': filename
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/restore/json', methods=['POST'])
+def restore_json():
+    """JSON yedeğinden veritabanını geri yükle"""
+    try:
+        data = request.get_json()
+        backup_data = data.get('backup_data')
+
+        if not backup_data:
+            return jsonify({'success': False, 'error': 'Yedek verisi bulunamadı'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Mevcut verileri temizle (OPSIYONEL - kullanıcıya sorulabilir)
+        replace_existing = data.get('replace_existing', False)
+        if replace_existing:
+            cursor.execute('DELETE FROM urunler')
+
+        # Bütçeyi geri yükle
+        if 'butce' in backup_data:
+            butce = backup_data['butce']
+            cursor.execute('''
+                UPDATE butce
+                SET toplam_butce = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+            ''', (butce.get('toplam_butce', 0),))
+
+        # Ürünleri geri yükle
+        if 'urunler' in backup_data:
+            for urun in backup_data['urunler']:
+                # ID'yi yedeğe bırak veya yeni oluştur
+                if replace_existing and 'id' in urun:
+                    # ID'yi koruyarak ekle
+                    cursor.execute('''
+                        INSERT INTO urunler (
+                            id, urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi,
+                            link, resim_url, kategori, alt_kategori, oda, statu, oncelik,
+                            teknik_ozellikler, notlar, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        urun.get('id'),
+                        urun.get('urun_adi'),
+                        urun.get('marka'),
+                        urun.get('fiyat', 0),
+                        urun.get('indirimli_fiyat'),
+                        urun.get('fiyat_guncelleme_tarihi'),
+                        urun.get('link'),
+                        urun.get('resim_url'),
+                        urun.get('kategori', 'Diğer'),
+                        urun.get('alt_kategori', 'Genel'),
+                        urun.get('oda', 'Salon'),
+                        urun.get('statu', 'Araştırılıyor'),
+                        urun.get('oncelik', 'Normal'),
+                        urun.get('teknik_ozellikler'),
+                        urun.get('notlar'),
+                        urun.get('created_at'),
+                        urun.get('updated_at')
+                    ))
+                else:
+                    # Yeni ID ile ekle
+                    cursor.execute('''
+                        INSERT INTO urunler (
+                            urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi,
+                            link, resim_url, kategori, alt_kategori, oda, statu, oncelik,
+                            teknik_ozellikler, notlar, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        urun.get('urun_adi'),
+                        urun.get('marka'),
+                        urun.get('fiyat', 0),
+                        urun.get('indirimli_fiyat'),
+                        urun.get('fiyat_guncelleme_tarihi'),
+                        urun.get('link'),
+                        urun.get('resim_url'),
+                        urun.get('kategori', 'Diğer'),
+                        urun.get('alt_kategori', 'Genel'),
+                        urun.get('oda', 'Salon'),
+                        urun.get('statu', 'Araştırılıyor'),
+                        urun.get('oncelik', 'Normal'),
+                        urun.get('teknik_ozellikler'),
+                        urun.get('notlar'),
+                        urun.get('created_at'),
+                        urun.get('updated_at')
+                    ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'{len(backup_data.get("urunler", []))} ürün geri yüklendi'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Startup
 if __name__ == '__main__':

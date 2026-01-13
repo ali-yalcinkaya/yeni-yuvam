@@ -96,9 +96,23 @@
                                 <button @click="exportExcelAlinanlar" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">✅ Alınan Ürünler</button>
                             </div>
                         </div>
+                        <div class="relative group">
+                            <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all text-sm font-medium">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                                <span class="hidden sm:inline">Yedek</span>
+                            </button>
+                            <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <button @click="backupJSON" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">💾 Yedek Al (JSON)</button>
+                                <button @click="restoreJSONClick" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 transition-all">📂 Geri Yükle</button>
+                            </div>
+                        </div>
                         <button @click="showDashboard = true" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-100 text-amber-600 hover:bg-amber-200 transition-all text-sm font-medium">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                             <span class="hidden sm:inline">Dashboard</span>
+                        </button>
+                        <button @click="showChecklist = true" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-100 text-purple-600 hover:bg-purple-200 transition-all text-sm font-medium">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                            <span class="hidden sm:inline">Eksik Ürünler</span>
                         </button>
                         <button @click="openAddModal" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-400 to-rose-500 text-white hover:from-rose-500 hover:to-rose-600 shadow-lg shadow-rose-200 transition-all text-sm font-medium">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -310,6 +324,34 @@
                                 <label class="block text-sm font-medium text-slate-700 mb-1.5">İndirimli Fiyat (₺)</label>
                                 <input v-model="formData.indirimli_fiyat" type="number" step="0.01" min="0" placeholder="Varsa indirimli fiyatı girin" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm">
                                 <p class="mt-1 text-xs text-slate-400">💡 İndirimli fiyat girerseniz, orjinal fiyat üstü çizili gösterilir</p>
+                            </div>
+                            <!-- Fiyat Geçmişi (sadece edit modunda) -->
+                            <div v-if="editMode && priceHistory.length > 0" class="md:col-span-2">
+                                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h4 class="text-sm font-semibold text-blue-700 flex items-center gap-2">
+                                            📊 Fiyat Geçmişi
+                                            <span class="text-xs font-normal text-blue-500">(Son {{ priceHistory.length }} güncelleme)</span>
+                                        </h4>
+                                        <button type="button" @click="showPriceHistory = !showPriceHistory" class="text-xs text-blue-600 hover:text-blue-700">
+                                            {{ showPriceHistory ? 'Gizle' : 'Göster' }}
+                                        </button>
+                                    </div>
+                                    <div v-show="showPriceHistory" class="mt-3 space-y-2 max-h-32 overflow-y-auto">
+                                        <div v-for="(record, idx) in priceHistory" :key="idx" class="flex items-center justify-between text-xs p-2 bg-white rounded-lg">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-slate-500">{{ formatDate(record.kayit_tarihi) }}</span>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-medium text-slate-700">{{ formatPrice(record.fiyat) }} ₺</span>
+                                                    <span v-if="record.indirimli_fiyat" class="text-rose-600">→ {{ formatPrice(record.indirimli_fiyat) }} ₺</span>
+                                                </div>
+                                            </div>
+                                            <span v-if="idx < priceHistory.length - 1" :class="getPriceChangeClass(record, priceHistory[idx + 1])" class="font-medium">
+                                                {{ getPriceChange(record, priceHistory[idx + 1]) }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
@@ -557,6 +599,66 @@
             </div>
         </div>
 
+        <!-- Eksik Ürünler Kontrol Listesi Modal -->
+        <div v-if="showChecklist" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" @click.self="showChecklist = false">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden animate-fadeIn">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-xl font-semibold text-slate-800">📋 Eksik Ürünler Kontrol Listesi</h2>
+                        <button @click="showChecklist = false" class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">Yeni eviniz için ihtiyacınız olan ürünleri kontrol edin ve ekleyin</p>
+                </div>
+                <div class="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+                    <div v-for="(group, groupName) in checklistTemplate" :key="groupName" class="mb-6">
+                        <h3 class="font-display text-lg font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <span class="text-2xl">{{ group.icon }}</span>
+                            <span>{{ groupName }}</span>
+                            <span class="text-xs font-normal text-slate-400">({{ getCheckedCount(groupName) }}/{{ group.items.length }})</span>
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div v-for="(item, idx) in group.items" :key="idx"
+                                 class="flex items-center gap-3 p-3 rounded-xl border transition-all"
+                                 :class="isItemInList(item.name) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'">
+                                <input type="checkbox"
+                                       :checked="isItemInList(item.name)"
+                                       @change="toggleItemCheck(item)"
+                                       class="w-5 h-5 rounded border-2 text-sage-500 focus:ring-sage-500">
+                                <div class="flex-1">
+                                    <div class="font-medium text-sm" :class="isItemInList(item.name) ? 'text-green-700 line-through' : 'text-slate-700'">
+                                        {{ item.name }}
+                                    </div>
+                                    <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                                        <span class="px-2 py-0.5 rounded bg-white">{{ item.category }}</span>
+                                        <span>•</span>
+                                        <span :class="getPriorityClass(item.priority)">{{ item.priority }}</span>
+                                    </div>
+                                </div>
+                                <button v-if="!isItemInList(item.name)"
+                                        @click="addItemFromChecklist(item)"
+                                        class="px-3 py-1.5 rounded-lg bg-sage-500 text-white text-xs font-medium hover:bg-sage-600 transition-all">
+                                    + Ekle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <div class="text-sm text-slate-600">
+                        <strong>{{ getTotalCheckedCount() }}</strong> / {{ getTotalItemsCount() }} ürün tamamlandı
+                    </div>
+                    <button @click="showChecklist = false" class="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all text-sm font-medium">
+                        Kapat
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden file input for JSON restore -->
+        <input type="file" ref="jsonFileInput" @change="onJSONFileChange" accept="application/json,.json" style="display: none;">
+
         <!-- Toast -->
         <div v-if="toast.show" class="fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-xl animate-fadeIn" :class="toast.type === 'success' ? 'bg-sage-500 text-white' : 'bg-red-500 text-white'">{{ toast.message }}</div>
     </div>
@@ -615,10 +717,15 @@
                 const toast = ref({ show: false, message: '', type: 'success' });
                 const fileInput = ref(null);
                 const selectedFile = ref(null);
+                const jsonFileInput = ref(null);
                 const seciliToplam = ref(0);
                 const showCompare = ref(false);
                 const compareProducts = ref([]);
-                
+                const showChecklist = ref(false);
+                const checklistTemplate = ref({});
+                const priceHistory = ref([]);
+                const showPriceHistory = ref(false);
+
                 const seciliUrunSayisi = computed(() => urunler.value.filter(u => u.secili).length);
                 const hasActiveFilters = computed(() => aktifFiltre.value.kategori || aktifFiltre.value.alt_kategori || aktifFiltre.value.oda || aktifFiltre.value.statu || aramaMetni.value);
                 const butceYuzdesi = computed(() => dashboard.value.toplam_butce === 0 ? 0 : Math.round((dashboard.value.harcanan_tutar / dashboard.value.toplam_butce) * 100));
@@ -770,6 +877,8 @@
                             const teknik = JSON.parse(data.teknik_ozellikler);
                             Object.assign(formData.value, teknik);
                         }
+                        // Fiyat geçmişini çek
+                        await fetchPriceHistory(urun.id);
                     } catch (e) { formData.value = { ...urun }; }
                     scrapedSpecs.value = {};
                     selectedFile.value = null;
@@ -885,6 +994,83 @@
                 const exportExcel = () => { window.location.href = '/api/export/excel'; };
                 const exportExcelAlinanlar = () => { window.location.href = '/api/export/excel/alinanlar'; };
 
+                // JSON Yedekleme fonksiyonları
+                const backupJSON = async () => {
+                    try {
+                        const res = await fetch('/api/backup/json');
+                        const result = await res.json();
+
+                        if (result.success) {
+                            // JSON'u dosya olarak indir
+                            const dataStr = JSON.stringify(result.data, null, 2);
+                            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                            const url = URL.createObjectURL(dataBlob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = result.filename;
+                            link.click();
+                            URL.revokeObjectURL(url);
+
+                            showToast('Yedek başarıyla oluşturuldu');
+                        } else {
+                            showToast('Yedek oluşturma hatası', 'error');
+                        }
+                    } catch (e) {
+                        showToast('Yedek oluşturma hatası: ' + e.message, 'error');
+                    }
+                };
+
+                const restoreJSONClick = () => {
+                    if (jsonFileInput.value) {
+                        jsonFileInput.value.click();
+                    }
+                };
+
+                const onJSONFileChange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    // Onay al
+                    const confirmed = confirm(
+                        'UYARI: Bu işlem mevcut verilerin ÜZERİNE yazacaktır!\n\n' +
+                        'Devam etmek istediğinize emin misiniz?\n\n' +
+                        'Önceki verilerinizi korumak için önce yedek almanızı öneririz.'
+                    );
+
+                    if (!confirmed) {
+                        e.target.value = '';
+                        return;
+                    }
+
+                    try {
+                        const text = await file.text();
+                        const backupData = JSON.parse(text);
+
+                        const res = await fetch('/api/restore/json', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                backup_data: backupData,
+                                replace_existing: true
+                            })
+                        });
+
+                        const result = await res.json();
+
+                        if (result.success) {
+                            showToast(result.message);
+                            await fetchUrunler();
+                            await fetchDashboard();
+                        } else {
+                            showToast('Geri yükleme hatası: ' + result.error, 'error');
+                        }
+                    } catch (e) {
+                        showToast('Dosya okuma hatası: ' + e.message, 'error');
+                    }
+
+                    e.target.value = '';
+                };
+
                 // Kıyaslama fonksiyonları
                 const compareSelected = () => {
                     compareProducts.value = urunler.value.filter(u => u.secili);
@@ -918,18 +1104,150 @@
                     }
                 };
 
-                onMounted(() => { fetchUrunler(); fetchDashboard(); });
-                
+                // Eksik Ürünler Kontrol Listesi fonksiyonları
+                const fetchChecklistTemplate = async () => {
+                    try {
+                        const res = await fetch('/api/eksik-urunler-sablonu');
+                        checklistTemplate.value = await res.json();
+                    } catch (e) {
+                        console.error('Şablon yükleme hatası:', e);
+                    }
+                };
+
+                const isItemInList = (itemName) => {
+                    return urunler.value.some(u =>
+                        u.urun_adi.toLowerCase().includes(itemName.toLowerCase()) ||
+                        itemName.toLowerCase().includes(u.urun_adi.toLowerCase())
+                    );
+                };
+
+                const toggleItemCheck = (item) => {
+                    // Eğer ürün listede yoksa, ekle
+                    if (!isItemInList(item.name)) {
+                        addItemFromChecklist(item);
+                    }
+                };
+
+                const addItemFromChecklist = async (item) => {
+                    try {
+                        saving.value = true;
+                        const res = await fetch('/api/urunler', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                urun_adi: item.name,
+                                kategori: item.category,
+                                oda: item.room,
+                                oncelik: item.priority,
+                                statu: 'Araştırılıyor',
+                                alt_kategori: 'Genel'
+                            })
+                        });
+
+                        if (res.ok) {
+                            await fetchUrunler();
+                            await fetchDashboard();
+                            showToast(`${item.name} eklendi`);
+                        } else {
+                            showToast('Ekleme hatası', 'error');
+                        }
+                    } catch (e) {
+                        showToast('Ekleme hatası', 'error');
+                    } finally {
+                        saving.value = false;
+                    }
+                };
+
+                const getCheckedCount = (groupName) => {
+                    if (!checklistTemplate.value[groupName]) return 0;
+                    return checklistTemplate.value[groupName].items.filter(item => isItemInList(item.name)).length;
+                };
+
+                const getTotalCheckedCount = () => {
+                    let count = 0;
+                    Object.keys(checklistTemplate.value).forEach(groupName => {
+                        count += getCheckedCount(groupName);
+                    });
+                    return count;
+                };
+
+                const getTotalItemsCount = () => {
+                    let count = 0;
+                    Object.keys(checklistTemplate.value).forEach(groupName => {
+                        count += checklistTemplate.value[groupName].items.length;
+                    });
+                    return count;
+                };
+
+                // Fiyat Geçmişi fonksiyonları
+                const fetchPriceHistory = async (urunId) => {
+                    try {
+                        const res = await fetch(`/api/urunler/${urunId}/fiyat-gecmisi`);
+                        const data = await res.json();
+                        if (data.success) {
+                            priceHistory.value = data.history;
+                            showPriceHistory.value = data.history.length > 0;
+                        }
+                    } catch (e) {
+                        console.error('Fiyat geçmişi yüklenemedi:', e);
+                        priceHistory.value = [];
+                    }
+                };
+
+                const formatDate = (dateString) => {
+                    const date = new Date(dateString);
+                    const now = new Date();
+                    const diff = now - date;
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+                    if (days === 0) return 'Bugün';
+                    if (days === 1) return 'Dün';
+                    if (days < 7) return `${days} gün önce`;
+                    if (days < 30) return `${Math.floor(days / 7)} hafta önce`;
+                    if (days < 365) return `${Math.floor(days / 30)} ay önce`;
+
+                    return date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+                };
+
+                const getPriceChange = (current, previous) => {
+                    const currentPrice = current.indirimli_fiyat || current.fiyat;
+                    const previousPrice = previous.indirimli_fiyat || previous.fiyat;
+                    const diff = currentPrice - previousPrice;
+
+                    if (diff === 0) return '-';
+                    const sign = diff > 0 ? '+' : '';
+                    return `${sign}${formatPrice(Math.abs(diff))} ₺`;
+                };
+
+                const getPriceChangeClass = (current, previous) => {
+                    const currentPrice = current.indirimli_fiyat || current.fiyat;
+                    const previousPrice = previous.indirimli_fiyat || previous.fiyat;
+                    const diff = currentPrice - previousPrice;
+
+                    if (diff > 0) return 'text-red-600';
+                    if (diff < 0) return 'text-green-600';
+                    return 'text-slate-400';
+                };
+
+                onMounted(() => {
+                    fetchUrunler();
+                    fetchDashboard();
+                    fetchChecklistTemplate();
+                });
+
                 return {
                     urunler, filteredUrunler, loading, saving, scraping, kategoriler, odalar, kategoriAlanlari, altKategoriler,
-                    showModal, showDashboard, showDeleteConfirm, showCompare, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
-                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, seciliToplam, seciliUrunSayisi, compareProducts,
+                    showModal, showDashboard, showDeleteConfirm, showCompare, showChecklist, editMode, eklemeMode, formData, scrapeUrl, scrapeError, scrapeSuccess, scrapedSpecs,
+                    aktifFiltre, aramaMetni, dashboard, deleteTarget, toast, fileInput, selectedFile, jsonFileInput, seciliToplam, seciliUrunSayisi, compareProducts, checklistTemplate,
+                    priceHistory, showPriceHistory,
                     hasActiveFilters, dinamikAlanlar, mevcutAltKategoriler, mevcutAltKategorilerFiltre, butceYuzdesi,
                     showToast, formatPrice, getDomain, formatSpecName, getPlaceholder, getPriorityClass, parseTeknik, getTopSpecs,
                     fetchUrunler, fetchDashboard, filtrele, onKategoriFilterChange, resetFilters, hesaplaSeciliToplam, temizleSecim,
-                    openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange,
+                    openAddModal, editUrun, closeModal, onKategoriChange, onAltKategoriChange, onFileChange, onJSONFileChange,
                     scrapeProduct, saveUrun, confirmDelete, deleteUrun, toggleStatu, updateButce, exportExcel, exportExcelAlinanlar,
-                    compareSelected, getAllSpecKeys, getSpecValue
+                    backupJSON, restoreJSONClick, compareSelected, getAllSpecKeys, getSpecValue,
+                    isItemInList, toggleItemCheck, addItemFromChecklist, getCheckedCount, getTotalCheckedCount, getTotalItemsCount,
+                    fetchPriceHistory, formatDate, getPriceChange, getPriceChangeClass
                 };
             }
         }).mount('#app');
