@@ -441,19 +441,32 @@ def extract_with_regex(soup, existing_specs=None):
     # Çözünürlük - SADECE TV/Monitör/Ekran ürünlerinde ara
     if 'cozunurluk' not in specs:
         # Önce ürünün TV/Monitör/Ekran olup olmadığını kontrol et
-        is_display_product = any(keyword in text for keyword in [
-            'televizyon', 'tv', 'led tv', 'smart tv', 'monitör', 'monitor',
-            'ekran', 'display', 'oled', 'qled', 'lcd'
+        # Başlık ve kategori bilgilerini kontrol et (daha güvenilir)
+        text_lower = text.lower()
+        title_lower = (title or '').lower()
+
+        # Kesinlikle ekran ürünü olmalı
+        is_display_product = any(keyword in title_lower for keyword in [
+            'televizyon', 'tv', 'smart tv', 'monitör', 'monitor'
+        ]) or any(keyword in text_lower[:500] for keyword in [  # Sadece ilk 500 karakter
+            'televizyon özellikleri', 'tv özellikleri', 'monitör özellikleri',
+            'ekran boyutu', 'ekran çözünürlüğü'
         ])
 
-        if is_display_product:
+        # Kesinlikle beyaz eşya DEĞİL olmalı
+        is_not_appliance = not any(keyword in title_lower for keyword in [
+            'buzdolabı', 'çamaşır', 'bulaşık', 'fırın', 'kurutma',
+            'klima', 'aspiratör', 'davlumbaz'
+        ])
+
+        if is_display_product and is_not_appliance:
             # Context-aware arama: çözünürlük kelimesinin yakınında ara
             context_patterns = [
                 r'(?:ekran|çözünürlük|resolution|panel)[\s\w]{0,30}?(4K|8K|FHD|Full\s*HD|UHD|QHD|2K)',
                 r'(4K|8K|FHD|Full\s*HD|UHD|QHD|2K)[\s\w]{0,30}?(?:ekran|çözünürlük|resolution|panel)',
             ]
             for pattern in context_patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
+                match = re.search(pattern, text_lower, re.IGNORECASE)
                 if match:
                     specs['cozunurluk'] = match.group(1).upper()
                     break
