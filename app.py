@@ -123,6 +123,8 @@ def init_db():
             urun_adi TEXT NOT NULL,
             marka TEXT,
             fiyat REAL DEFAULT 0,
+            indirimli_fiyat REAL DEFAULT NULL,
+            fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             link TEXT,
             resim_url TEXT,
             kategori TEXT DEFAULT 'Diğer',
@@ -150,7 +152,20 @@ def init_db():
     cursor.execute('SELECT COUNT(*) FROM butce')
     if cursor.fetchone()[0] == 0:
         cursor.execute('INSERT INTO butce (id, toplam_butce) VALUES (1, 100000)')
-    
+
+    # Migration: Yeni sütunları ekle (eğer yoksa)
+    try:
+        cursor.execute("SELECT indirimli_fiyat FROM urunler LIMIT 1")
+    except sqlite3.OperationalError:
+        print("→ Migration: indirimli_fiyat sütunu ekleniyor...")
+        cursor.execute("ALTER TABLE urunler ADD COLUMN indirimli_fiyat REAL DEFAULT NULL")
+
+    try:
+        cursor.execute("SELECT fiyat_guncelleme_tarihi FROM urunler LIMIT 1")
+    except sqlite3.OperationalError:
+        print("→ Migration: fiyat_guncelleme_tarihi sütunu ekleniyor...")
+        cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
     conn.commit()
     conn.close()
     print("✓ Veritabanı başlatıldı")
@@ -760,15 +775,21 @@ def add_urun():
             except:
                 pass
         
+        # İndirimli fiyat kontrolü
+        fiyat = float(data.get('fiyat', 0) or 0)
+        indirimli_fiyat = data.get('indirimli_fiyat', '')
+        indirimli_fiyat = float(indirimli_fiyat) if indirimli_fiyat else None
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO urunler (urun_adi, marka, fiyat, link, resim_url, kategori, alt_kategori, oda, statu, oncelik, teknik_ozellikler, notlar)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO urunler (urun_adi, marka, fiyat, indirimli_fiyat, fiyat_guncelleme_tarihi, link, resim_url, kategori, alt_kategori, oda, statu, oncelik, teknik_ozellikler, notlar)
+            VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('urun_adi', 'İsimsiz Ürün'),
             data.get('marka', ''),
-            float(data.get('fiyat', 0) or 0),
+            fiyat,
+            indirimli_fiyat,
             data.get('link', ''),
             resim_url,
             kategori,
@@ -833,17 +854,29 @@ def update_urun(id):
                     if alan in data and data[alan]:
                         teknik[alan] = data[alan]
         
+        # İndirimli fiyat kontrolü
+        fiyat = float(data.get('fiyat', urun['fiyat']) or 0)
+        indirimli_fiyat = data.get('indirimli_fiyat', '')
+        indirimli_fiyat = float(indirimli_fiyat) if indirimli_fiyat else None
+
+        # Fiyat değiştiyse güncelleme tarihini yenile
+        fiyat_guncelleme_sql = ''
+        if fiyat != urun['fiyat'] or indirimli_fiyat != urun.get('indirimli_fiyat'):
+            fiyat_guncelleme_sql = ", fiyat_guncelleme_tarihi = datetime('now')"
+
         cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE urunler SET 
-                urun_adi = ?, marka = ?, fiyat = ?, link = ?, resim_url = ?,
-                kategori = ?, alt_kategori = ?, oda = ?, statu = ?, oncelik = ?, 
+        cursor.execute(f'''
+            UPDATE urunler SET
+                urun_adi = ?, marka = ?, fiyat = ?, indirimli_fiyat = ?, link = ?, resim_url = ?,
+                kategori = ?, alt_kategori = ?, oda = ?, statu = ?, oncelik = ?,
                 teknik_ozellikler = ?, notlar = ?, updated_at = CURRENT_TIMESTAMP
+                {fiyat_guncelleme_sql}
             WHERE id = ?
         ''', (
             data.get('urun_adi', urun['urun_adi']),
             data.get('marka', urun['marka']),
-            float(data.get('fiyat', urun['fiyat']) or 0),
+            fiyat,
+            indirimli_fiyat,
             data.get('link', urun['link']),
             resim_url,
             kategori,
