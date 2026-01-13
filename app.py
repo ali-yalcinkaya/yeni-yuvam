@@ -255,6 +255,19 @@ def init_db():
         )
     ''')
 
+    # Custom eksik ürünler listesi
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS custom_checklist_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            room TEXT NOT NULL,
+            priority TEXT DEFAULT 'Normal',
+            group_name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Migration: Yeni sütunları ekle (eğer yoksa)
     try:
         cursor.execute("SELECT indirimli_fiyat FROM urunler LIMIT 1")
@@ -435,7 +448,7 @@ def scrape_arcelik(url, soup):
             # Arçelik resimleri için öncelik sırası: data-src > src
             src = img.get('data-src') or img.get('data-lazy') or img.get('src')
             if src and 'placeholder' not in src.lower():
-                # Protokol düzeltmeleri
+                # Protokol düzeltmeleri (HER ZAMAN ÖNCE KONTROL ET)
                 if src.startswith('//'):
                     src = 'https:' + src
                 elif src.startswith('/'):
@@ -445,17 +458,18 @@ def scrape_arcelik(url, soup):
 
                 # Arçelik resim optimizasyonu - 1000x1000 boyut (SADECE webp formatı)
                 if 'arcelik.com.tr/media/' in src:
-                    # Eğer resize parametresi yoksa ekle
+                    # 1. Eğer resize parametresi yoksa ekle
                     if '/resize/' not in src:
                         src = src.replace('/media/', '/media/resize/')
 
-                    # Webp formatına çevir (image.png veya image.jpg varsa değiştir)
-                    if '/image.png' in src:
-                        src = src.replace('/image.png', '/image.webp')
-                    elif '/image.jpg' in src or '/image.jpeg' in src:
-                        src = src.replace('/image.jpg', '/image.webp').replace('/image.jpeg', '/image.webp')
+                    # 2. Dosya uzantısını .webp yap (HER ZAMAN)
+                    # /image.png → /image.webp
+                    # /image.jpg → /image.webp
+                    src = src.replace('/image.png', '/image.webp')
+                    src = src.replace('/image.jpg', '/image.webp')
+                    src = src.replace('/image.jpeg', '/image.webp')
 
-                    # Eğer henüz 1000Wx1000H formatı yoksa ekle
+                    # 3. Eğer henüz 1000Wx1000H formatı yoksa ekle
                     if '/1000Wx1000H/' not in src:
                         # Dosya uzantısını bul ve webp formatına çevir
                         if '.png' in src.lower() and '/image.webp' not in src:
@@ -1476,8 +1490,80 @@ def get_kategori_alanlari():
 
 @app.route('/api/eksik-urunler-sablonu', methods=['GET'])
 def get_eksik_urunler_sablonu():
-    """Eksik ürünler şablonunu döndür"""
-    return jsonify(EKSIK_URUNLER_SABLONU)
+    """Eksik ürünler şablonunu döndür (varsayılan + custom)"""
+    # Varsayılan template'i kopyala
+    import copy
+    template = copy.deepcopy(EKSIK_URUNLER_SABLONU)
+
+    # Custom items'ı database'den çek
+    try:
+        conn = get_db_connection()
+        custom_items = conn.execute('SELECT * FROM custom_checklist_items ORDER BY created_at DESC').fetchall()
+        conn.close()
+
+        # Custom items'ı ilgili gruplara ekle
+        for item in custom_items:
+            group_name = item['group_name']
+            if group_name not in template:
+                # Eğer grup yoksa oluştur
+                template[group_name] = {
+                    'icon': '📌',
+                    'items': []
+                }
+
+            # Item'ı gruba ekle
+            template[group_name]['items'].append({
+                'id': item['id'],  # Custom item ID'si
+                'name': item['name'],
+                'category': item['category'],
+                'room': item['room'],
+                'priority': item['priority'],
+                'custom': True  # Custom item olduğunu belirt
+            })
+    except Exception as e:
+        print(f"Custom items yüklenemedi: {e}")
+
+    return jsonify(template)
+
+@app.route('/api/custom-checklist-items', methods=['POST'])
+def add_custom_checklist_item():
+    """Eksik ürünler listesine custom item ekle"""
+    try:
+        data = request.get_json()
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO custom_checklist_items (name, category, room, priority, group_name)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            data.get('name'),
+            data.get('category'),
+            data.get('room'),
+            data.get('priority', 'Normal'),
+            data.get('group_name')
+        ))
+
+        conn.commit()
+        new_id = cursor.lastrowid
+        conn.close()
+
+        return jsonify({'success': True, 'id': new_id, 'message': 'Öğe eklendi'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/custom-checklist-items/<int:id>', methods=['DELETE'])
+def delete_custom_checklist_item(id):
+    """Custom checklist item sil"""
+    try:
+        conn = get_db_connection()
+        conn.execute('DELETE FROM custom_checklist_items WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Öğe silindi'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/urunler/<int:id>/fiyat-gecmisi', methods=['GET'])
 def get_fiyat_gecmisi(id):
