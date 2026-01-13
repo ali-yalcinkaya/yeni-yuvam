@@ -266,7 +266,7 @@ def init_db():
         cursor.execute("SELECT fiyat_guncelleme_tarihi FROM urunler LIMIT 1")
     except sqlite3.OperationalError:
         print("→ Migration: fiyat_guncelleme_tarihi sütunu ekleniyor...")
-        cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT NULL")
 
     try:
         cursor.execute("SELECT resim_base64 FROM urunler LIMIT 1")
