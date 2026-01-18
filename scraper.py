@@ -14,6 +14,19 @@ import time
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urlparse, urljoin
+from datetime import datetime, timedelta
+
+# ============================================
+# CACHE SİSTEMİ (5 dakika TTL)
+# ============================================
+SCRAPE_CACHE = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# ============================================
+# RATE LIMITING
+# ============================================
+LAST_REQUEST_TIME = {}
+MIN_REQUEST_INTERVAL = 1.5  # API çağrıları arası minimum 1.5 saniye
 
 # ============================================
 # USER-AGENT ROTASYONU (Masaüstü + Mobil)
@@ -203,17 +216,65 @@ def normalize_price(price_str):
         return 0
 
 # ============================================
+# CACHE YÖNETİMİ
+# ============================================
+def get_from_cache(url):
+    """Cache'den veri çek"""
+    if url in SCRAPE_CACHE:
+        cached_data, timestamp = SCRAPE_CACHE[url]
+        if datetime.now() - timestamp < timedelta(seconds=CACHE_TTL_SECONDS):
+            print(f"✅ Cache hit: {url}")
+            return cached_data
+        else:
+            # Expired cache
+            del SCRAPE_CACHE[url]
+    return None
+
+def save_to_cache(url, data):
+    """Cache'e kaydet"""
+    SCRAPE_CACHE[url] = (data, datetime.now())
+
+def clear_expired_cache():
+    """Süresi dolmuş cache'leri temizle"""
+    now = datetime.now()
+    expired_keys = [
+        url for url, (data, timestamp) in SCRAPE_CACHE.items()
+        if now - timestamp >= timedelta(seconds=CACHE_TTL_SECONDS)
+    ]
+    for key in expired_keys:
+        del SCRAPE_CACHE[key]
+
+# ============================================
+# RATE LIMITING
+# ============================================
+def wait_for_rate_limit(domain):
+    """Rate limit kontrolü - API çağrıları arası bekleme"""
+    if domain in LAST_REQUEST_TIME:
+        elapsed = time.time() - LAST_REQUEST_TIME[domain]
+        if elapsed < MIN_REQUEST_INTERVAL:
+            wait_time = MIN_REQUEST_INTERVAL - elapsed
+            print(f"⏱️  Rate limit: {wait_time:.1f}s bekliyor ({domain})")
+            time.sleep(wait_time)
+
+    LAST_REQUEST_TIME[domain] = time.time()
+
+# ============================================
 # TRENDYOL PUBLIC API PARSER
 # ============================================
 def scrape_api_trendyol(url, session):
     """Trendyol Public API"""
     try:
+        # Product ID extraction
         match = re.search(r'-p-(\d+)', url)
         if not match:
+            print(f"⚠️ Trendyol: Product ID bulunamadı (URL pattern: -p-XXXXX)")
             return None
 
         product_id = match.group(1)
         api_url = f'https://public.trendyol.com/discovery-web-productgw-service/api/productDetail/{product_id}'
+
+        # Rate limiting for API
+        wait_for_rate_limit('trendyol.com')
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -223,24 +284,51 @@ def scrape_api_trendyol(url, session):
 
         response = session.get(api_url, headers=headers, timeout=10, proxies={})
 
-        if response.status_code == 200:
-            data = response.json()
-            product = data.get('result', {})
-            price = product.get('price', {}).get('sellingPrice', 0)
-            images = product.get('images', [])
-            image_url = images[0] if images else ''
-            if image_url and not image_url.startswith('http'):
-                image_url = 'https://cdn.dsmcdn.com' + image_url
+        if response.status_code != 200:
+            print(f"⚠️ Trendyol API: HTTP {response.status_code}")
+            return None
 
-            return {
-                'title': product.get('name', ''),
-                'price': float(price) if price else 0,
-                'image_url': image_url,
-                'brand': product.get('brand', {}).get('name', ''),
-                'description': product.get('description', ''),
-            }
+        data = response.json()
+
+        if 'result' not in data:
+            print(f"⚠️ Trendyol API: 'result' field bulunamadı")
+            return None
+
+        product = data.get('result', {})
+        price = product.get('price', {}).get('sellingPrice', 0)
+        images = product.get('images', [])
+        image_url = images[0] if images else ''
+
+        if image_url and not image_url.startswith('http'):
+            image_url = 'https://cdn.dsmcdn.com' + image_url
+
+        result = {
+            'title': product.get('name', ''),
+            'price': float(price) if price else 0,
+            'image_url': image_url,
+            'brand': product.get('brand', {}).get('name', ''),
+            'description': product.get('description', ''),
+        }
+
+        # Veri kalitesi kontrolü
+        if not result['title']:
+            print(f"⚠️ Trendyol API: Başlık boş")
+        if not result['price']:
+            print(f"⚠️ Trendyol API: Fiyat bulunamadı")
+
+        return result
+
+    except requests.exceptions.Timeout:
+        print(f"⚠️ Trendyol API: Timeout (10 saniye)")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Trendyol API: Network error - {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Trendyol API: JSON parse error - {str(e)}")
+        return None
     except Exception as e:
-        print(f"Trendyol API error: {e}")
+        print(f"⚠️ Trendyol API: Unexpected error - {str(e)}")
         return None
 
 # ============================================
@@ -251,26 +339,48 @@ def scrape_ikea(url, session, soup):
     try:
         result = {'title': '', 'price': 0, 'brand': 'IKEA', 'image_url': ''}
 
+        # Title extraction
         og_title = soup.find('meta', property='og:title')
         if og_title:
             result['title'] = og_title.get('content', '')
+        else:
+            print(f"⚠️ IKEA: og:title meta tag bulunamadı")
 
+        # Price extraction with multiple selectors
         price_selectors = ['.pip-price', '.price-module__container', '[data-testid="price"]', '.product-pip__price']
+        price_found = False
         for selector in price_selectors:
             el = soup.select_one(selector)
             if el:
                 price_text = el.get_text(strip=True)
                 result['price'] = normalize_price(price_text)
                 if result['price'] > 0:
+                    price_found = True
                     break
 
+        if not price_found:
+            print(f"⚠️ IKEA: Fiyat bulunamadı (selectors: {', '.join(price_selectors)})")
+
+        # Image extraction
         og_image = soup.find('meta', property='og:image')
         if og_image:
             result['image_url'] = og_image.get('content', '')
+        else:
+            # Fallback: product:price:amount meta tag
+            meta_price = soup.find('meta', property='product:price:amount')
+            if meta_price:
+                result['price'] = normalize_price(meta_price.get('content', '0'))
+
+        # Veri kalitesi kontrolü
+        if not result['title']:
+            print(f"⚠️ IKEA: Başlık boş")
+        if not result['price'] or result['price'] <= 0:
+            print(f"⚠️ IKEA: Geçerli fiyat bulunamadı")
 
         return result if result['title'] and result['price'] > 0 else None
+
     except Exception as e:
-        print(f"IKEA error: {e}")
+        print(f"⚠️ IKEA: Unexpected error - {str(e)}")
         return None
 
 # ============================================
@@ -705,15 +815,47 @@ def extract_hidden_json_data(soup, html_text):
                 # Items (GA4 format)
                 if 'items' in ecommerce and len(ecommerce['items']) > 0:
                     item = ecommerce['items'][0]
+
+                    # Title extraction (item_name or name)
                     if not result['title']:
-                        result['title'] = item.get('item_name', '')
+                        result['title'] = item.get('item_name', '') or item.get('name', '')
+
+                    # Price extraction with multiple formats
                     if not result['price']:
+                        price_val = item.get('price', 0) or item.get('item_price', 0)
                         try:
-                            result['price'] = float(item.get('price', 0))
+                            price_float = float(price_val)
+                            # Bazı siteler fiyatı cent cinsinden gönderir (örn: 269900 = 2699.00 TL)
+                            # Eğer fiyat 10000'den büyükse ve ondalık kısmı yoksa, cent olabilir
+                            if price_float > 10000 and price_float == int(price_float):
+                                # Muhtemelen cent cinsinden, 100'e böl
+                                result['price'] = price_float / 100
+                            else:
+                                result['price'] = price_float
                         except:
                             pass
+
+                    # Brand extraction
                     if not result['brand']:
-                        result['brand'] = item.get('item_brand', '')
+                        result['brand'] = item.get('item_brand', '') or item.get('brand', '')
+
+                    # Image URL extraction (GA4 genellikle image gönderir)
+                    if not result['image_url']:
+                        img = item.get('item_image', '') or item.get('image_url', '') or item.get('image', '')
+                        if img and img.startswith('http'):
+                            result['image_url'] = img
+
+                    # SKU/GTIN extraction
+                    if not result.get('sku'):
+                        result['sku'] = item.get('item_id', '') or item.get('sku', '')
+
+                    # Category extraction
+                    if not result.get('category'):
+                        cat = (item.get('item_category', '') or
+                               item.get('item_category1', '') or
+                               item.get('category', ''))
+                        if cat:
+                            result['category'] = cat
 
             # Eğer bulunduysa döndür
             if result['title'] or result['price']:
@@ -1316,8 +1458,22 @@ def scrape_product(url):
         }
     """
     try:
+        # 0. CACHE KONTROLÜ
+        cached_result = get_from_cache(url)
+        if cached_result:
+            return cached_result
+
+        # Cache temizliği (her 10 istekten birinde)
+        import random
+        if random.randint(1, 10) == 1:
+            clear_expired_cache()
+
         # 1. MOBİL URL NORMALİZASYONU
         normalized_url, was_mobile = normalize_mobile_url(url)
+
+        # Rate limiting - domain bazlı
+        domain = urlparse(normalized_url).netloc.lower()
+        wait_for_rate_limit(domain)
 
         # Önce masaüstü URL'i dene
         response, error = fetch_with_retry(normalized_url)
@@ -1341,18 +1497,24 @@ def scrape_product(url):
         # Domain'e göre handler seç
         handler = get_site_handler(domain)
         site_specific_data = None
+        parser_used = handler
+        parser_error = None
 
         # Handler'a göre özel parser çalıştır
-        if handler == 'api_trendyol':
-            site_specific_data = scrape_api_trendyol(normalized_url, session)
-        elif handler == 'shopify':
-            site_specific_data = parse_shopify_product(normalized_url, session)
-        elif handler == 'nextjs':
-            site_specific_data = parse_nextjs_product(soup, domain)
-        elif handler == 'woocommerce':
-            site_specific_data = parse_woocommerce_product(normalized_url, session, soup)
-        elif handler == 'ikea':
-            site_specific_data = scrape_ikea(normalized_url, session, soup)
+        try:
+            if handler == 'api_trendyol':
+                site_specific_data = scrape_api_trendyol(normalized_url, session)
+            elif handler == 'shopify':
+                site_specific_data = parse_shopify_product(normalized_url, session)
+            elif handler == 'nextjs':
+                site_specific_data = parse_nextjs_product(soup, domain)
+            elif handler == 'woocommerce':
+                site_specific_data = parse_woocommerce_product(normalized_url, session, soup)
+            elif handler == 'ikea':
+                site_specific_data = scrape_ikea(normalized_url, session, soup)
+        except Exception as e:
+            parser_error = f"{handler} parser error: {str(e)}"
+            print(f"⚠️ {parser_error}")
 
         # ============ VERİ ÇIKARMA (FALLBACK CHAIN) ============
         json_ld_data = extract_json_ld(soup)
@@ -1363,12 +1525,74 @@ def scrape_product(url):
         # datalayer, jsonld, jsonld_datalayer, meta_html handler'ları generic parser kullanır
         special_data = site_specific_data or {}
 
+        # Fallback chain tracking
+        data_sources = {
+            'title': None,
+            'price': None,
+            'image_url': None,
+            'brand': None,
+            'description': None
+        }
+
+        # Title fallback
+        title = special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title']
+        if special_data.get('title'):
+            data_sources['title'] = handler
+        elif json_ld_data['title']:
+            data_sources['title'] = 'json-ld'
+        elif meta_data['title']:
+            data_sources['title'] = 'meta-tags'
+        elif html_data['title']:
+            data_sources['title'] = 'html-selectors'
+
+        # Price fallback
+        price = special_data.get('price', 0) or json_ld_data['price'] or meta_data['price'] or html_data['price']
+        if special_data.get('price', 0):
+            data_sources['price'] = handler
+        elif json_ld_data['price']:
+            data_sources['price'] = 'json-ld'
+        elif meta_data['price']:
+            data_sources['price'] = 'meta-tags'
+        elif html_data['price']:
+            data_sources['price'] = 'html-selectors'
+
+        # Image URL fallback
+        image_url = special_data.get('image_url', '') or json_ld_data['image_url'] or meta_data['image_url'] or html_data['image_url']
+        if special_data.get('image_url'):
+            data_sources['image_url'] = handler
+        elif json_ld_data['image_url']:
+            data_sources['image_url'] = 'json-ld'
+        elif meta_data['image_url']:
+            data_sources['image_url'] = 'meta-tags'
+        elif html_data['image_url']:
+            data_sources['image_url'] = 'html-selectors'
+
+        # Brand fallback
+        brand = special_data.get('brand', '') or json_ld_data['brand'] or meta_data['brand'] or html_data['brand']
+        if special_data.get('brand'):
+            data_sources['brand'] = handler
+        elif json_ld_data['brand']:
+            data_sources['brand'] = 'json-ld'
+        elif meta_data['brand']:
+            data_sources['brand'] = 'meta-tags'
+        elif html_data['brand']:
+            data_sources['brand'] = 'html-selectors'
+
+        # Description fallback
+        description = special_data.get('description', '') or json_ld_data['description'] or meta_data['description']
+        if special_data.get('description'):
+            data_sources['description'] = handler
+        elif json_ld_data['description']:
+            data_sources['description'] = 'json-ld'
+        elif meta_data['description']:
+            data_sources['description'] = 'meta-tags'
+
         result = {
-            'title': special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title'],
-            'price': special_data.get('price', 0) or json_ld_data['price'] or meta_data['price'] or html_data['price'],
-            'image_url': special_data.get('image_url', '') or json_ld_data['image_url'] or meta_data['image_url'] or html_data['image_url'],
-            'brand': special_data.get('brand', '') or json_ld_data['brand'] or meta_data['brand'] or html_data['brand'],
-            'description': special_data.get('description', '') or json_ld_data['description'] or meta_data['description'],
+            'title': title,
+            'price': price,
+            'image_url': image_url,
+            'brand': brand,
+            'description': description,
             'link': normalized_url,
             'sku': json_ld_data['sku'],
             'gtin': json_ld_data['gtin'],
@@ -1407,10 +1631,40 @@ def scrape_product(url):
                     result['brand'] = value
                     break
 
-        return {
+        # Debug metadata (sadece debug modunda göster)
+        debug_info = {
+            'handler': handler,
+            'parser_used': parser_used,
+            'data_sources': data_sources,
+        }
+        if parser_error:
+            debug_info['parser_error'] = parser_error
+
+        # Debug modunda metadata ekle
+        import os
+        if os.environ.get('SCRAPER_DEBUG') == 'true':
+            result['_debug'] = debug_info
+            print(f"\n{'='*50}")
+            print(f"🔍 SCRAPING DEBUG INFO")
+            print(f"{'='*50}")
+            print(f"Domain: {domain}")
+            print(f"Handler: {handler}")
+            if parser_error:
+                print(f"⚠️  Parser Error: {parser_error}")
+            print(f"\nData Sources:")
+            for field, source in data_sources.items():
+                if source:
+                    print(f"  • {field}: {source}")
+            print(f"{'='*50}\n")
+
+        # Sonucu cache'e kaydet
+        final_result = {
             'success': True,
             'data': result
         }
+        save_to_cache(url, final_result)
+
+        return final_result
 
     except Exception as e:
         return {'success': False, 'error': f'Beklenmeyen hata: {str(e)}'}
