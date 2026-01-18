@@ -113,6 +113,167 @@ REGEX_PATTERNS = {
 }
 
 # ============================================
+# SİTE HANDLER ROUTER - v3.0
+# ============================================
+SITE_HANDLERS = {
+    # Marketplace - API Öncelikli
+    'trendyol.com': 'api_trendyol',
+    'hepsiburada.com': 'datalayer',  # API yerine dataLayer daha güvenilir
+    'n11.com': 'datalayer',
+    'ciceksepeti.com': 'datalayer',
+
+    # Beyaz Eşya - JSON-LD Çalışıyor
+    'arcelik.com.tr': 'jsonld',
+    'beko.com.tr': 'jsonld',
+    'vestel.com.tr': 'jsonld',
+    'bosch-home.com.tr': 'jsonld',
+    'siemens-home.bsh-group.com': 'jsonld',
+    'samsung.com': 'jsonld_datalayer',
+    'altus.com.tr': 'jsonld',
+
+    # Mobilya - Shopify
+    'enzahome.com.tr': 'shopify',
+    'normod.com': 'shopify',
+    'vivense.com': 'shopify',
+    'alfemo.com.tr': 'shopify',
+
+    # Mobilya - Diğer
+    'ikea.com.tr': 'ikea',
+    'bellona.com.tr': 'jsonld',
+    'istikbal.com.tr': 'jsonld',
+    'dogtas.com': 'meta_html',
+    'mondi.com.tr': 'meta_html',
+
+    # Ev Tekstili
+    'englishhome.com': 'woocommerce',
+    'madamecoco.com': 'woocommerce',
+    'yatas.com.tr': 'jsonld',
+    'tac.com.tr': 'woocommerce',
+    'chakra.com.tr': 'woocommerce',
+
+    # Dekorasyon
+    'zarahome.com': 'nextjs',
+    'karaca.com': 'datalayer',
+    'hm.com': 'nextjs',
+
+    # DIY
+    'koctas.com.tr': 'jsonld_datalayer',
+    'bauhaus.com.tr': 'meta_html',
+
+    # Elektronik
+    'vatanbilgisayar.com': 'datalayer',
+    'teknosa.com': 'datalayer',
+    'mediamarkt.com.tr': 'datalayer',
+}
+
+def get_site_handler(domain):
+    """Domain'den uygun handler'ı bul"""
+    domain_lower = domain.lower()
+    for site_domain, handler in SITE_HANDLERS.items():
+        if site_domain in domain_lower:
+            return handler
+    return 'generic'
+
+def normalize_price(price_str):
+    """Fiyat string'ini float'a çevir"""
+    if isinstance(price_str, (int, float)):
+        return float(price_str)
+    if not price_str:
+        return 0
+
+    price_clean = str(price_str).replace('TL', '').replace('₺', '').strip()
+
+    # Nokta ve virgül normalizasyonu
+    if ',' in price_clean and '.' in price_clean:
+        if price_clean.rindex(',') > price_clean.rindex('.'):
+            price_clean = price_clean.replace('.', '').replace(',', '.')
+        else:
+            price_clean = price_clean.replace(',', '')
+    elif ',' in price_clean:
+        price_clean = price_clean.replace(',', '.')
+    elif '.' in price_clean:
+        parts = price_clean.split('.')
+        if len(parts) == 2 and len(parts[1]) == 3:
+            price_clean = price_clean.replace('.', '')
+
+    price_clean = price_clean.replace(' ', '')
+    try:
+        return float(price_clean)
+    except:
+        return 0
+
+# ============================================
+# TRENDYOL PUBLIC API PARSER
+# ============================================
+def scrape_api_trendyol(url, session):
+    """Trendyol Public API"""
+    try:
+        match = re.search(r'-p-(\d+)', url)
+        if not match:
+            return None
+
+        product_id = match.group(1)
+        api_url = f'https://public.trendyol.com/discovery-web-productgw-service/api/productDetail/{product_id}'
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://www.trendyol.com/',
+        }
+
+        response = session.get(api_url, headers=headers, timeout=10, proxies={})
+
+        if response.status_code == 200:
+            data = response.json()
+            product = data.get('result', {})
+            price = product.get('price', {}).get('sellingPrice', 0)
+            images = product.get('images', [])
+            image_url = images[0] if images else ''
+            if image_url and not image_url.startswith('http'):
+                image_url = 'https://cdn.dsmcdn.com' + image_url
+
+            return {
+                'title': product.get('name', ''),
+                'price': float(price) if price else 0,
+                'image_url': image_url,
+                'brand': product.get('brand', {}).get('name', ''),
+                'description': product.get('description', ''),
+            }
+    except Exception as e:
+        print(f"Trendyol API error: {e}")
+        return None
+
+# ============================================
+# IKEA PARSER
+# ============================================
+def scrape_ikea(url, session, soup):
+    """IKEA özel parser - Meta + HTML"""
+    try:
+        result = {'title': '', 'price': 0, 'brand': 'IKEA', 'image_url': ''}
+
+        og_title = soup.find('meta', property='og:title')
+        if og_title:
+            result['title'] = og_title.get('content', '')
+
+        price_selectors = ['.pip-price', '.price-module__container', '[data-testid="price"]', '.product-pip__price']
+        for selector in price_selectors:
+            el = soup.select_one(selector)
+            if el:
+                price_text = el.get_text(strip=True)
+                result['price'] = normalize_price(price_text)
+                if result['price'] > 0:
+                    break
+
+        og_image = soup.find('meta', property='og:image')
+        if og_image:
+            result['image_url'] = og_image.get('content', '')
+
+        return result if result['title'] and result['price'] > 0 else None
+    except Exception as e:
+        print(f"IKEA error: {e}")
+        return None
+
+# ============================================
 # WOOCOMMERCE PARSER (English Home, Madame Coco, IKEA vb.)
 # ============================================
 def parse_woocommerce_product(url, session, soup):
@@ -1176,30 +1337,31 @@ def scrape_product(url):
         session = requests.Session()
         session.trust_env = False
 
-        # ============ SİTE-ÖZEL PARSER'LAR ============
-        # Shopify (Enza Home, Normod, Vivense, Alfemo)
-        shopify_data = None
-        if any(site in domain for site in ['enzahome', 'normod', 'vivense', 'alfemo']):
-            shopify_data = parse_shopify_product(normalized_url, session)
+        # ============ ROUTER SİSTEMİ - v3.0 ============
+        # Domain'e göre handler seç
+        handler = get_site_handler(domain)
+        site_specific_data = None
 
-        # Next.js (Zara Home, H&M Home)
-        # NOT: Karaca dataLayer kullanıyor, Next.js değil - generic parser otomatik çekecek
-        nextjs_data = None
-        if any(site in domain for site in ['zarahome', 'zara', 'hm.com']):
-            nextjs_data = parse_nextjs_product(soup, domain)
+        # Handler'a göre özel parser çalıştır
+        if handler == 'api_trendyol':
+            site_specific_data = scrape_api_trendyol(normalized_url, session)
+        elif handler == 'shopify':
+            site_specific_data = parse_shopify_product(normalized_url, session)
+        elif handler == 'nextjs':
+            site_specific_data = parse_nextjs_product(soup, domain)
+        elif handler == 'woocommerce':
+            site_specific_data = parse_woocommerce_product(normalized_url, session, soup)
+        elif handler == 'ikea':
+            site_specific_data = scrape_ikea(normalized_url, session, soup)
 
-        # WooCommerce (English Home, Madame Coco, IKEA, Yataş, Taç, Chakra)
-        woocommerce_data = None
-        if any(site in domain for site in ['englishhome', 'madamecoco', 'ikea.com.tr', 'yatas', 'tac.com.tr', 'chakra']):
-            woocommerce_data = parse_woocommerce_product(normalized_url, session, soup)
-
-        # ============ VERİ ÇIKARMA ============
+        # ============ VERİ ÇIKARMA (FALLBACK CHAIN) ============
         json_ld_data = extract_json_ld(soup)
         meta_data = extract_meta_tags(soup)
         html_data = extract_html_elements(soup, normalized_url, html_text)
 
-        # Birleştir (Öncelik: Site-Özel > JSON-LD > Meta > HTML)
-        special_data = shopify_data or nextjs_data or woocommerce_data or {}
+        # Birleştir (Öncelik: Site-Specific > JSON-LD > Meta > HTML)
+        # datalayer, jsonld, jsonld_datalayer, meta_html handler'ları generic parser kullanır
+        special_data = site_specific_data or {}
 
         result = {
             'title': special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title'],
