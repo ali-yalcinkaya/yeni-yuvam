@@ -456,34 +456,32 @@ def scrape_arcelik(url, soup):
                 elif src.startswith('www.'):
                     src = 'https://' + src
 
-                # Arçelik resim optimizasyonu - 1000x1000 boyut (SADECE webp formatı)
+                # Arçelik resim optimizasyonu - BASİTLEŞTİRİLMİŞ VERSİYON
                 if 'arcelik.com.tr/media/' in src:
-                    # 1. Eğer resize parametresi yoksa ekle
+                    # 1. Resize parametresi yoksa ekle
                     if '/resize/' not in src:
                         src = src.replace('/media/', '/media/resize/')
 
-                    # 2. Dosya uzantısını .webp yap (HER ZAMAN)
-                    # /image.png → /image.webp
-                    # /image.jpg → /image.webp
-                    src = src.replace('/image.png', '/image.webp')
-                    src = src.replace('/image.jpg', '/image.webp')
-                    src = src.replace('/image.jpeg', '/image.webp')
-
-                    # 3. Eğer henüz 1000Wx1000H formatı yoksa ekle
-                    if '/1000Wx1000H/' not in src:
-                        # Dosya uzantısını bul ve webp formatına çevir
-                        if '.png' in src.lower() and '/image.webp' not in src:
-                            src = src.replace('.png', '.png/1000Wx1000H/image.webp', 1)
-                            src = src.replace('.PNG', '.PNG/1000Wx1000H/image.webp', 1)
-                        elif ('.jpg' in src.lower() or '.jpeg' in src.lower()) and '/image.webp' not in src:
-                            if '.jpg' in src:
-                                src = src.replace('.jpg', '.jpg/1000Wx1000H/image.webp', 1)
-                            elif '.JPG' in src:
-                                src = src.replace('.JPG', '.JPG/1000Wx1000H/image.webp', 1)
-                            elif '.jpeg' in src:
-                                src = src.replace('.jpeg', '.jpeg/1000Wx1000H/image.webp', 1)
-                        elif '.webp' in src.lower() and '/1000Wx1000H/' not in src:
-                            src = src.replace('.webp', '.webp/1000Wx1000H/image.webp', 1)
+                    # 2. Eğer URL'de zaten /1000Wx1000H/image.* varsa, sadece uzantıyı .webp yap
+                    if '/1000Wx1000H/' in src:
+                        # /1000Wx1000H/image.png → /1000Wx1000H/image.webp
+                        # /1000Wx1000H/image.jpg → /1000Wx1000H/image.webp
+                        src = src.replace('/1000Wx1000H/image.png', '/1000Wx1000H/image.webp')
+                        src = src.replace('/1000Wx1000H/image.jpg', '/1000Wx1000H/image.webp')
+                        src = src.replace('/1000Wx1000H/image.jpeg', '/1000Wx1000H/image.webp')
+                    else:
+                        # 3. /1000Wx1000H/ yoksa, dosya adından sonra ekle
+                        # .../7131960100_MDM2_LOW_1.png → .../7131960100_MDM2_LOW_1.png/1000Wx1000H/image.webp
+                        import re
+                        # Son noktadan sonra uzantıyı bul
+                        match = re.search(r'\.(png|jpg|jpeg|webp)(\?.*)?$', src, re.IGNORECASE)
+                        if match:
+                            uzanti_pozisyon = match.start() + len(match.group(1)) + 1  # . + uzantı
+                            # Uzantıdan sonra /1000Wx1000H/image.webp ekle
+                            src = src[:uzanti_pozisyon] + '/1000Wx1000H/image.webp' + src[uzanti_pozisyon:]
+                            # Query string varsa temizle
+                            if '?' in src:
+                                src = src.split('?')[0]
 
                 data['resim_url'] = src
                 break
@@ -1053,16 +1051,19 @@ def update_urun(id):
     """Ürün güncelle"""
     try:
         data = request.form.to_dict()
-        
+
         conn = get_db_connection()
         urun = conn.execute('SELECT * FROM urunler WHERE id = ?', (id,)).fetchone()
         if not urun:
             conn.close()
             return jsonify({'error': 'Ürün bulunamadı'}), 404
-        
+
+        # Row objesini dict'e çevir
+        urun_dict = dict(urun)
+
         # Dosya upload kontrolü ve base64 dönüşümü
-        resim_url = data.get('resim_url', urun['resim_url'])
-        resim_base64 = urun.get('resim_base64')  # Mevcut base64'ü koru
+        resim_url = data.get('resim_url', urun_dict['resim_url'])
+        resim_base64 = urun_dict.get('resim_base64')  # Mevcut base64'ü koru
 
         if 'resim_dosya' in request.files:
             file = request.files['resim_dosya']
@@ -1075,30 +1076,49 @@ def update_urun(id):
                 resim_url = f'/static/uploads/{filename}'
                 # Dosyayı base64'e çevir
                 resim_base64 = file_to_base64(filepath)
-        elif resim_url != urun['resim_url'] and resim_url and resim_url.startswith('http'):
+        elif resim_url != urun_dict['resim_url'] and resim_url and resim_url.startswith('http'):
             # Yeni URL girilmişse, resmi base64'e çevir
             resim_base64 = image_url_to_base64(resim_url)
 
-        # Teknik özellikler
-        teknik = {}
-        kategori = data.get('kategori', urun['kategori'])
+        # Teknik özellikler - Mevcut özellikleri koru, yeni/değişenleri güncelle
+        try:
+            mevcut_teknik = json.loads(urun_dict.get('teknik_ozellikler') or '{}')
+        except:
+            mevcut_teknik = {}
+
+        teknik = mevcut_teknik.copy()  # Mevcut özellikleri koru
+
+        kategori = data.get('kategori', urun_dict['kategori'])
         alt_kategori = data.get('alt_kategori', 'Genel')
-        
+
+        # Form'dan gelen teknik özellikleri ekle/güncelle
         if kategori in KATEGORI_ALANLARI:
             if alt_kategori in KATEGORI_ALANLARI[kategori]:
                 for alan in KATEGORI_ALANLARI[kategori][alt_kategori]:
-                    if alan in data and data[alan]:
-                        teknik[alan] = data[alan]
-        
+                    if alan in data:
+                        if data[alan]:  # Değer varsa ekle/güncelle
+                            teknik[alan] = data[alan]
+                        elif alan in teknik:  # Değer boşsa ve mevcutta varsa sil
+                            del teknik[alan]
+
+        # JSON olarak gönderilen teknik özellikleri de kontrol et (scrape işleminden)
+        if 'teknik_ozellikler_json' in data:
+            try:
+                yeni_teknik = json.loads(data['teknik_ozellikler_json'])
+                teknik.update(yeni_teknik)  # Scrape edilen özellikleri ekle
+            except:
+                pass
+
         # İndirimli fiyat kontrolü
-        fiyat = float(data.get('fiyat', urun['fiyat']) or 0)
+        fiyat = float(data.get('fiyat', urun_dict['fiyat']) or 0)
         indirimli_fiyat = data.get('indirimli_fiyat', '')
         indirimli_fiyat = float(indirimli_fiyat) if indirimli_fiyat else None
 
         # Fiyat değiştiyse güncelleme tarihini yenile ve geçmişe kaydet
         fiyat_guncelleme_sql = ''
         cursor = conn.cursor()
-        if fiyat != urun['fiyat'] or indirimli_fiyat != urun.get('indirimli_fiyat'):
+        eski_indirimli = urun_dict.get('indirimli_fiyat')
+        if fiyat != urun_dict['fiyat'] or indirimli_fiyat != eski_indirimli:
             fiyat_guncelleme_sql = ", fiyat_guncelleme_tarihi = datetime('now')"
             # Fiyat geçmişine kaydet
             cursor.execute('''
@@ -1114,20 +1134,20 @@ def update_urun(id):
                 {fiyat_guncelleme_sql}
             WHERE id = ?
         ''', (
-            data.get('urun_adi', urun['urun_adi']),
-            data.get('marka', urun['marka']),
+            data.get('urun_adi', urun_dict['urun_adi']),
+            data.get('marka', urun_dict['marka']),
             fiyat,
             indirimli_fiyat,
-            data.get('link', urun['link']),
+            data.get('link', urun_dict['link']),
             resim_url,
             resim_base64,
             kategori,
             alt_kategori,
-            data.get('oda', urun['oda']),
-            data.get('statu', urun['statu']),
-            data.get('oncelik', urun['oncelik']),
+            data.get('oda', urun_dict['oda']),
+            data.get('statu', urun_dict['statu']),
+            data.get('oncelik', urun_dict['oncelik']),
             json.dumps(teknik, ensure_ascii=False),
-            data.get('notlar', urun['notlar']),
+            data.get('notlar', urun_dict['notlar']),
             id
         ))
         conn.commit()
