@@ -1369,6 +1369,7 @@ def export_excel():
 
     # Excel dosyası oluştur
     output = BytesIO()
+    # type: ignore
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Tüm Ürünler', index=False)
 
@@ -1478,6 +1479,7 @@ def export_excel_alinanlar():
 
     # Excel dosyası oluştur
     output = BytesIO()
+    # type: ignore
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         # Alınan ürünler sheet
         df.to_excel(writer, sheet_name='Alınan Ürünler', index=False)

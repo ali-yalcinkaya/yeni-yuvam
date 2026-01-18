@@ -980,6 +980,8 @@ def parse_shopify_product(url, use_cloudscraper=False):
                     return result
 
         except Exception as e:
+            import requests
+            session = requests.Session()
             print(f"⚠️ Shopify HTML hatası: {e}")
 
         return None
