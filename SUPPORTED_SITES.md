@@ -3,10 +3,10 @@
 ## ✅ TAMAMEN DESTEKLENİYOR
 
 ### 🛒 Marketplace
-- **Trendyol** - Generic HTML Parser
-- **Hepsiburada** - Generic HTML + format:webp
-- **N11** - Generic HTML Parser
-- **Çiçeksepeti** - Generic HTML Parser
+- **Trendyol** - Trendyol Public API ✅ (Router v3.0)
+- **Hepsiburada** - dataLayer (Google Tag Manager)
+- **N11** - dataLayer + Generic HTML Parser
+- **Çiçeksepeti** - dataLayer + Generic HTML Parser
 
 ### 🏠 Beyaz Eşya
 - **Arçelik** - Generic HTML + WebP Optimizer
@@ -24,11 +24,11 @@
 - **Alfemo** - Generic HTML (kontrol edilecek)
 
 ### 🛋️ Mobilya (Diğer)
-- **IKEA** - WooCommerce Parser (yeni)
-- **Bellona** - Generic HTML (kontrol edilecek)
-- **İstikbal** - Generic HTML (kontrol edilecek)
-- **Doğtaş** - Generic HTML (kontrol edilecek)
-- **Mondi** - Generic HTML (kontrol edilecek)
+- **IKEA** - IKEA Özel Parser ✅ (Router v3.0)
+- **Bellona** - JSON-LD Parser
+- **İstikbal** - JSON-LD Parser
+- **Doğtaş** - Meta Tags + HTML Fallback
+- **Mondi** - Meta Tags + HTML Fallback
 
 ### 🏡 Ev Tekstili (WooCommerce Platform)
 - **English Home** - WooCommerce Parser (yeni)
@@ -55,51 +55,147 @@
 
 ## 🔧 PLATFORM DESTEKLERİ
 
-### 1. Shopify (JSON API + Klaviyo)
-- Enza Home
-- Normod ✅
-- Vivense
-- Alfemo (kontrol edilecek)
+### ⚡ ROUTER SİSTEMİ (v3.0 - YENİ!)
+
+**Otomatik Handler Seçimi**: Domain'e göre en uygun parser otomatik seçilir.
+
+```python
+SITE_HANDLERS = {
+    'trendyol.com': 'api_trendyol',     # Public API
+    'ikea.com.tr': 'ikea',              # Özel parser
+    'enzahome.com.tr': 'shopify',       # Shopify JSON API
+    'karaca.com': 'datalayer',          # GTM ecommerce
+    'zarahome.com': 'nextjs',           # __NEXT_DATA__
+    'arcelik.com.tr': 'jsonld',         # Schema.org
+    # ... 30+ site
+}
+```
+
+**8 Handler Tipi:**
+1. `api_trendyol` - Trendyol Public API ✅
+2. `shopify` - Shopify JSON API + Klaviyo
+3. `nextjs` - __NEXT_DATA__ parser
+4. `woocommerce` - WooCommerce HTML selectors
+5. `ikea` - IKEA özel parser ✅
+6. `datalayer` - GTM/GA ecommerce
+7. `jsonld` - Schema.org JSON-LD
+8. `meta_html` - Meta tags + HTML fallback
+
+---
+
+### 1. Trendyol Public API ✅
+- **Site**: Trendyol
+- **Handler**: `api_trendyol`
+
+**Nasıl Çalışır**:
+- URL'den product ID çıkar: `-p-(\d+)`
+- API endpoint: `discovery-web-productgw-service/api/productDetail/{id}`
+- Response: `result.product.{name, price, images, brand}`
+- CDN fix: `cdn.dsmcdn.com` prefix
+
+**Avantajlar**: En hızlı, en güvenilir veri kaynağı
+
+---
+
+### 2. Shopify (JSON API + Klaviyo)
+- **Siteler**: Enza Home, Normod ✅, Vivense, Alfemo
+- **Handler**: `shopify`
 
 **Nasıl Çalışır**:
 - Öncelik 1: `/products/{handle}.json` endpoint
 - Yedek: Klaviyo tracking `var item = {...}`
 - Fallback: Meta tags
 
-### 2. Google Tag Manager (dataLayer)
-- Karaca ✅
-- MediaMarkt
-- Teknosa
-- *GTM kullanan diğer siteler*
+**Veri Yapısı**:
+```json
+{
+  "product": {
+    "title": "...",
+    "variants": [{"price": "101360.00"}],
+    "images": [{"src": "..."}]
+  }
+}
+```
+
+---
+
+### 3. IKEA Özel Parser ✅
+- **Site**: IKEA Türkiye
+- **Handler**: `ikea`
+
+**Nasıl Çalışır**:
+- Meta tags: `og:title`, `og:image`, `product:price:amount`
+- HTML selectors: `.pip-price`, `.price-module__container`, `[data-testid="price"]`
+- normalize_price() ile Türkçe fiyat formatı
+
+**Özellikler**: IKEA'nın özel DOM yapısı için optimize edilmiş
+
+---
+
+### 4. Google Tag Manager (dataLayer)
+- **Siteler**: Karaca ✅, Hepsiburada, N11, Çiçeksepeti, MediaMarkt, Teknosa, Vatan
+- **Handler**: `datalayer`
 
 **Nasıl Çalışır**:
 - `dataLayer.push()` içinden ecommerce verisi
 - GA Universal: `ecommerce.detail.products[]`
-- GA4: `ecommerce.items[]`
+- GA4: `ecommerce.items[]` (item_name, price, item_brand)
 
-### 3. Next.js (__NEXT_DATA__)
-- Zara Home
-- *Diğerleri kontrol edilecek*
+**Pattern Matching**:
+```javascript
+dataLayer.push({
+  "ecommerce": {
+    "detail": {
+      "products": [{
+        "name": "...",
+        "price": "2699.00",
+        "brand": "..."
+      }]
+    }
+  }
+});
+```
+
+---
+
+### 5. Next.js (__NEXT_DATA__)
+- **Siteler**: Zara Home, H&M Home
+- **Handler**: `nextjs`
 
 **Nasıl Çalışır**: `<script id="__NEXT_DATA__">` içinden JSON parse
 
-### 4. WooCommerce
-- English Home
-- Madame Coco
-- IKEA Türkiye (kontrol edilecek)
-- Yataş, Taç, Chakra
-- *Diğerleri eklenecek*
+**Veri Yolu**: `props.pageProps.product`
+
+---
+
+### 6. WooCommerce
+- **Siteler**: English Home, Madame Coco, Yataş, Taç, Chakra
+- **Handler**: `woocommerce`
 
 **Nasıl Çalışır**:
-- WooCommerce HTML selectors
-- `.product_title`, `.woocommerce-Price-amount`
+- WooCommerce HTML selectors: `.product_title`, `.woocommerce-Price-amount`, `.wp-post-image`
 - Fallback: Meta tags
 
-### 5. Generic HTML Parser (Multi-Source)
-- Tüm diğer siteler (Trendyol, Hepsiburada, Arçelik, vb.)
-- **Veri Kaynakları**:
+---
+
+### 7. JSON-LD (Schema.org)
+- **Siteler**: Arçelik, Beko, Vestel, Bosch, Siemens, Samsung, Altus, Bellona, İstikbal, Koçtaş
+- **Handler**: `jsonld` veya `jsonld_datalayer`
+
+**Nasıl Çalışır**:
+- `<script type="application/ld+json">` parse
+- `@type: "Product"` standardı
+- `name`, `offers.price`, `brand`, `image` fields
+
+---
+
+### 8. Generic HTML Parser (Multi-Source)
+- **Siteler**: Diğer tüm siteler (fallback)
+- **Handler**: `meta_html` veya `generic`
+
+**Veri Kaynakları** (Cascade):
   1. JSON-LD (Schema.org)
-  2. Hidden JS variables
+  2. Hidden JS variables (window.__PRELOADED_STATE__, var product = {})
   3. Meta tags (OG, Product, Twitter)
   4. HTML selectors (92 selector)
     - Magento 2
@@ -126,15 +222,66 @@
 
 ## 🎯 SONRAKİ ADIMLAR
 
+### ✅ TAMAMLANANLAR
+
 1. ✅ Shopify Parser (Tamamlandı)
 2. ✅ Next.js Parser (Tamamlandı)
-3. ✅ WooCommerce Parser (Tamamlandı - English Home, Madame Coco, IKEA, Yataş, Taç, Chakra)
-4. ✅ Generic Parser Güçlendirme (Tamamlandı - Magento, PrestaShop, OpenCart, Shopware)
-   - 92 yeni selector eklendi
-   - Mock test ile %86-100 başarı oranı doğrulandı
-5. ✅ Mock Test Suite (Tamamlandı - Selector'lar test edildi)
-   - comprehensive_test.py: 30+ site için kapsamlı test
-   - mock_test.py: Platform bazlı selector doğrulaması
+3. ✅ WooCommerce Parser (Tamamlandı)
+4. ✅ Generic Parser Güçlendirme (92 selector)
+5. ✅ Mock Test Suite (Selector doğrulaması)
+6. ✅ **Router Sistemi v3.0** (YENİ!)
+   - SITE_HANDLERS dict (30+ site)
+   - Otomatik handler seçimi
+   - 8 farklı handler tipi
+7. ✅ **Trendyol Public API** (YENİ!)
+   - Product ID extraction
+   - API integration
+   - CDN image fix
+8. ✅ **IKEA Özel Parser** (YENİ!)
+   - Meta tags + HTML selectors
+   - normalize_price() helper
+   - Türkçe fiyat formatı
+
+8. ✅ **IKEA Özel Parser** (YENİ!)
+   - Meta tags + HTML selectors
+   - normalize_price() helper
+   - Türkçe fiyat formatı
+9. ✅ **Error Handling İyileştirme** (YENİ!)
+   - Fallback chain logging ✅
+   - Parser metadata tracking ✅
+   - Detaylı hata mesajları ✅
+   - Debug mode (SCRAPER_DEBUG=true)
+10. ✅ **Rate Limiting & Caching** (YENİ!)
+    - API çağrıları arası 1.5 sn bekleme ✅
+    - 5 dakika TTL cache sistemi ✅
+    - Domain bazlı rate limiting ✅
+    - Otomatik cache temizliği ✅
+
+### 🔄 DEVAM EDEN
+
+11. 🔄 **Gerçek URL Testleri**
+   - Her kategoriden test URL'leri ile doğrulama
+   - Trendyol API test ⚪
+   - IKEA parser test ⚪
+   - Karaca (dataLayer) re-test ⚪
+   - Normod (Shopify + Klaviyo) re-test ⚪
+
+### ⚪ PLANLANANLAR (Bir Sonraki Sprint)
+
+12. ⚪ **GA4 dataLayer Parser**
+    - `ecommerce.items[]` format
+    - MediaMarkt, Teknosa için özel parser
+    - item_name, price, item_brand fields
+
+13. ⚪ **Hepsiburada İyileştirme**
+    - dataLayer parser test
+    - SKU extraction kontrol
+    - format:webp görsel optimizasyonu
+
+14. ⚪ **Playwright Fallback (Son Çare)**
+    - JS rendering gereken siteler için
+    - Sadece diğer methodlar başarısız olursa
+    - Headless browser ile scraping
 
 ---
 
