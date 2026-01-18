@@ -503,6 +503,7 @@ def extract_hidden_json_data(soup, html_text):
     HTML içindeki gizli JS değişkenlerinden JSON verisi çıkar
     Örnek: window.__PRELOADED_STATE__ = {...}
     Örnek: var product = {...}
+    Örnek: dataLayer.push({...}) - Karaca, MediaMarkt vb.
     """
     result = {
         'title': '',
@@ -510,6 +511,55 @@ def extract_hidden_json_data(soup, html_text):
         'brand': '',
         'specs': {}
     }
+
+    # Pattern 0: window.dataLayer (Google Tag Manager)
+    # Karaca, MediaMarkt gibi siteler bunu kullanır
+    dataLayer_pattern = r'dataLayer\.push\(\s*({[\s\S]*?})\s*\);'
+    dataLayer_matches = re.finditer(dataLayer_pattern, html_text)
+
+    for match in dataLayer_matches:
+        try:
+            json_str = match.group(1)
+            data = json.loads(json_str)
+
+            # Ecommerce verisi
+            if 'ecommerce' in data:
+                ecommerce = data['ecommerce']
+
+                # Detail view (GA Universal format)
+                if 'detail' in ecommerce and 'products' in ecommerce['detail']:
+                    products = ecommerce['detail']['products']
+                    if products and len(products) > 0:
+                        product = products[0]
+                        if not result['title']:
+                            result['title'] = product.get('name', '')
+                        if not result['price']:
+                            try:
+                                result['price'] = float(product.get('price', 0))
+                            except:
+                                pass
+                        if not result['brand']:
+                            result['brand'] = product.get('brand', '')
+
+                # Items (GA4 format)
+                if 'items' in ecommerce and len(ecommerce['items']) > 0:
+                    item = ecommerce['items'][0]
+                    if not result['title']:
+                        result['title'] = item.get('item_name', '')
+                    if not result['price']:
+                        try:
+                            result['price'] = float(item.get('price', 0))
+                        except:
+                            pass
+                    if not result['brand']:
+                        result['brand'] = item.get('item_brand', '')
+
+            # Eğer bulunduysa döndür
+            if result['title'] or result['price']:
+                return result
+
+        except:
+            continue
 
     # Pattern 1: window.__PRELOADED_STATE__ veya __NEXT_DATA__
     patterns = [
@@ -1102,9 +1152,10 @@ def scrape_product(url):
         if any(site in domain for site in ['enzahome', 'normod', 'vivense', 'alfemo']):
             shopify_data = parse_shopify_product(normalized_url, session)
 
-        # Next.js (Karaca, Zara Home, H&M Home)
+        # Next.js (Zara Home, H&M Home)
+        # NOT: Karaca dataLayer kullanıyor, Next.js değil - generic parser otomatik çekecek
         nextjs_data = None
-        if any(site in domain for site in ['karaca', 'zarahome', 'zara', 'hm.com']):
+        if any(site in domain for site in ['zarahome', 'zara', 'hm.com']):
             nextjs_data = parse_nextjs_product(soup, domain)
 
         # WooCommerce (English Home, Madame Coco, IKEA, Yataş, Taç, Chakra)
