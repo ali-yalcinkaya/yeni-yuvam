@@ -959,7 +959,34 @@
                     showModal.value = true;
                 };
                 
-                const closeModal = () => { showModal.value = false; editMode.value = false; };
+                const closeModal = () => {
+                    showModal.value = false;
+                    editMode.value = false;
+                    eklemeMode.value = 'manuel';
+                    // FormData'yı temizle
+                    formData.value = {
+                        id: null,
+                        urun_adi: '',
+                        marka: '',
+                        fiyat: 0,
+                        indirimli_fiyat: null,
+                        link: '',
+                        resim_url: '',
+                        kategori: 'Beyaz Eşya',
+                        alt_kategori: 'Genel',
+                        oda: 'Salon',
+                        statu: 'Araştırılıyor',
+                        oncelik: 'Normal',
+                        notlar: ''
+                    };
+                    scrapedSpecs.value = {};
+                    scrapeUrl.value = '';
+                    scrapeError.value = '';
+                    scrapeSuccess.value = false;
+                    selectedFile.value = null;
+                    showPriceHistory.value = false;
+                    priceHistory.value = [];
+                };
                 const onKategoriChange = () => { formData.value.alt_kategori = mevcutAltKategoriler.value[0] || 'Genel'; };
                 const onAltKategoriChange = () => {};
                 const onFileChange = (e) => { selectedFile.value = e.target.files[0]; };
