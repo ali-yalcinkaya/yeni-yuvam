@@ -143,12 +143,22 @@ SITE_HANDLERS = {
     'siemens-home.bsh-group.com': 'jsonld',
     'samsung.com': 'jsonld_datalayer',
     'altus.com.tr': 'jsonld',
+    'lg.com': 'jsonld_datalayer',
+    'philips.com.tr': 'jsonld',
+    'grundig.com': 'jsonld',
+    'whirlpool.com.tr': 'jsonld',
+    'electrolux.com.tr': 'jsonld',
+    'indesit.com.tr': 'jsonld',
+    'hotpoint.com.tr': 'jsonld',
+    'profilo.com': 'jsonld',
 
     # Mobilya - Shopify
     'enzahome.com.tr': 'shopify',
     'normod.com': 'shopify',
     'vivense.com': 'shopify',
     'alfemo.com.tr': 'shopify',
+    'koltuktakimi.com': 'shopify',
+    'mobilya31.com': 'shopify',
 
     # Mobilya - Diğer
     'ikea.com.tr': 'ikea',
@@ -156,6 +166,10 @@ SITE_HANDLERS = {
     'istikbal.com.tr': 'jsonld',
     'dogtas.com': 'meta_html',
     'mondi.com.tr': 'meta_html',
+    'yildizmobilya.com.tr': 'jsonld',
+    'kilim.com': 'meta_html',
+    'weltew.com': 'meta_html',
+    'tepe-home.com': 'meta_html',
 
     # Ev Tekstili
     'englishhome.com': 'woocommerce',
@@ -163,20 +177,32 @@ SITE_HANDLERS = {
     'yatas.com.tr': 'jsonld',
     'tac.com.tr': 'woocommerce',
     'chakra.com.tr': 'woocommerce',
+    'ozdilek.com.tr': 'meta_html',
+    'linens.com.tr': 'woocommerce',
+    'enlev.com.tr': 'meta_html',
+    'englishhome.com.tr': 'woocommerce',
 
     # Dekorasyon
     'zarahome.com': 'nextjs',
     'karaca.com': 'datalayer',
     'hm.com': 'nextjs',
+    'koleksiyon.com.tr': 'meta_html',
+    'pasabahce.com': 'jsonld',
+    'bernardo.com.tr': 'jsonld',
+    'kutahyaporselen.com': 'jsonld',
 
     # DIY
     'koctas.com.tr': 'jsonld_datalayer',
     'bauhaus.com.tr': 'meta_html',
+    'adeo.com.tr': 'meta_html',
+    'praktiker.com.tr': 'meta_html',
 
     # Elektronik
     'vatanbilgisayar.com': 'datalayer',
     'teknosa.com': 'datalayer',
     'mediamarkt.com.tr': 'datalayer',
+    'gold.com.tr': 'meta_html',
+    'aygaz.com.tr': 'jsonld',
 }
 
 def get_site_handler(domain):
@@ -384,6 +410,125 @@ def scrape_ikea(url, session, soup):
         return None
 
 # ============================================
+# HEPSİBURADA DATALAYER PARSER
+# ============================================
+def scrape_datalayer_hepsiburada(soup, html_text):
+    """Hepsiburada dataLayer parser - GA4 + GA Universal hybrid"""
+    try:
+        result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
+
+        # dataLayer.push içinden ecommerce verisi çek
+        dataLayer_pattern = r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);'
+        matches = re.finditer(dataLayer_pattern, html_text)
+
+        for match in matches:
+            try:
+                json_str = match.group(1)
+                data = json.loads(json_str)
+
+                if 'ecommerce' in data:
+                    ecommerce = data['ecommerce']
+
+                    # GA4 format: items[]
+                    if 'items' in ecommerce and len(ecommerce['items']) > 0:
+                        item = ecommerce['items'][0]
+                        if not result['title']:
+                            result['title'] = item.get('item_name', '') or item.get('name', '')
+                        if not result['price']:
+                            price_val = item.get('price', 0) or item.get('item_price', 0)
+                            result['price'] = float(price_val) if price_val else 0
+                        if not result['brand']:
+                            result['brand'] = item.get('item_brand', '') or item.get('brand', '')
+                        if not result['image_url']:
+                            img = item.get('item_image', '') or item.get('image_url', '')
+                            if img and img.startswith('http'):
+                                result['image_url'] = img
+
+                    # GA Universal format: detail.products[]
+                    if 'detail' in ecommerce and 'products' in ecommerce['detail']:
+                        products = ecommerce['detail']['products']
+                        if products and len(products) > 0:
+                            product = products[0]
+                            if not result['title']:
+                                result['title'] = product.get('name', '')
+                            if not result['price']:
+                                result['price'] = float(product.get('price', 0))
+                            if not result['brand']:
+                                result['brand'] = product.get('brand', '')
+
+                    # Eğer veri bulunduysa döndür
+                    if result['title'] or result['price']:
+                        return result
+
+            except:
+                continue
+
+        # Fallback: Meta tags
+        if not result['title']:
+            og_title = soup.find('meta', property='og:title')
+            if og_title:
+                result['title'] = og_title.get('content', '')
+
+        if not result['image_url']:
+            og_image = soup.find('meta', property='og:image')
+            if og_image:
+                result['image_url'] = og_image.get('content', '')
+
+        return result if result['title'] and result['price'] > 0 else None
+
+    except Exception as e:
+        print(f"⚠️ Hepsiburada dataLayer: {str(e)}")
+        return None
+
+# ============================================
+# KARACA DATALAYER PARSER
+# ============================================
+def scrape_datalayer_karaca(soup, html_text):
+    """Karaca özel dataLayer parser - GA Universal format"""
+    try:
+        result = {'title': '', 'price': 0, 'brand': 'Karaca', 'image_url': ''}
+
+        # dataLayer.push içinden ecommerce.detail.products çek
+        dataLayer_pattern = r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);'
+        matches = re.finditer(dataLayer_pattern, html_text)
+
+        for match in matches:
+            try:
+                json_str = match.group(1)
+                data = json.loads(json_str)
+
+                if 'ecommerce' in data:
+                    ecommerce = data['ecommerce']
+
+                    # GA Universal format (Karaca bunu kullanıyor)
+                    if 'detail' in ecommerce and 'products' in ecommerce['detail']:
+                        products = ecommerce['detail']['products']
+                        if products and len(products) > 0:
+                            product = products[0]
+                            result['title'] = product.get('name', '')
+                            result['price'] = float(product.get('price', 0))
+                            result['brand'] = product.get('brand', 'Karaca')
+
+                            # Eğer bulunduysa döndür
+                            if result['title'] and result['price'] > 0:
+                                break
+
+            except:
+                continue
+
+        # Image için meta tag kullan
+        if not result['image_url']:
+            og_image = soup.find('meta', property='og:image')
+            if og_image:
+                result['image_url'] = og_image.get('content', '')
+
+        return result if result['title'] and result['price'] > 0 else None
+
+    except Exception as e:
+        print(f"⚠️ Karaca dataLayer: {str(e)}")
+        return None
+
+# ============================================
 # WOOCOMMERCE PARSER (English Home, Madame Coco, IKEA vb.)
 # ============================================
 def parse_woocommerce_product(url, session, soup):
@@ -465,20 +610,33 @@ def parse_shopify_product(url, session):
     """
     Shopify kullanan siteler için özel parser
     /products/{handle}.json endpoint'ini kullanır
+
+    Desteklenen URL formatları:
+    - https://normod.com/products/klem-butter-blush-3-3-1-koltuk-takimi
+    - https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/
+    - https://vivense.com/products/chester-koltuk?variant=123
     """
     try:
-        # URL'den handle'ı çıkar
-        # Örnek: https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/
-        # Handle: aldea-koltuk-takimi-3-1-20260107
         parsed = urlparse(url)
         path = parsed.path.strip('/')
 
-        # /products/ varsa kaldır
-        if path.startswith('products/'):
-            handle = path.replace('products/', '')
+        # Handle extraction
+        handle = ''
+
+        # Format 1: /products/{handle}
+        if 'products/' in path:
+            handle = path.split('products/')[-1].split('/')[0].split('?')[0]
         else:
-            # Path'in kendisi handle
-            handle = path.split('/')[0] if '/' in path else path
+            # Format 2: /{handle}/ (Enza Home formatı)
+            # Path segments'leri al ve son non-empty segment'i kullan
+            segments = [s for s in path.split('/') if s]
+            if segments:
+                # Son segment query string içerebilir, temizle
+                handle = segments[-1].split('?')[0]
+
+        if not handle:
+            print(f"⚠️ Shopify: Handle bulunamadı - URL: {url}")
+            return None
 
         # Shopify JSON endpoint
         json_url = f"{parsed.scheme}://{parsed.netloc}/products/{handle}.json"
@@ -1504,24 +1662,74 @@ def scrape_product(url):
         try:
             if handler == 'api_trendyol':
                 site_specific_data = scrape_api_trendyol(normalized_url, session)
+
             elif handler == 'shopify':
                 site_specific_data = parse_shopify_product(normalized_url, session)
+
             elif handler == 'nextjs':
                 site_specific_data = parse_nextjs_product(soup, domain)
+
             elif handler == 'woocommerce':
                 site_specific_data = parse_woocommerce_product(normalized_url, session, soup)
+
             elif handler == 'ikea':
                 site_specific_data = scrape_ikea(normalized_url, session, soup)
+
+            elif handler == 'datalayer':
+                # Site-specific dataLayer parsers
+                if 'hepsiburada' in domain:
+                    site_specific_data = scrape_datalayer_hepsiburada(soup, html_text)
+                elif 'karaca' in domain:
+                    site_specific_data = scrape_datalayer_karaca(soup, html_text)
+                else:
+                    # Generic dataLayer (N11, Çiçeksepeti, MediaMarkt, Teknosa, Vatan)
+                    hidden_data = extract_hidden_json_data(soup, html_text)
+                    if hidden_data and (hidden_data.get('title') or hidden_data.get('price')):
+                        site_specific_data = hidden_data
+
+            elif handler == 'jsonld':
+                # JSON-LD parser (Arçelik, Beko, Vestel, Bosch, Siemens, Bellona, İstikbal, Yataş, Altus)
+                # Generic fallback'te extract_json_ld zaten çağrılıyor, buraya özel bir şey gerekmez
+                site_specific_data = None
+
+            elif handler == 'jsonld_datalayer':
+                # Hybrid: JSON-LD + dataLayer (Samsung, Koçtaş)
+                # İki kaynak da generic fallback'te birleşiyor
+                site_specific_data = None
+
+            elif handler == 'meta_html':
+                # Meta tags + HTML fallback (Doğtaş, Mondi, Bauhaus)
+                # Generic fallback chain zaten bu işi yapıyor
+                site_specific_data = None
+
         except Exception as e:
             parser_error = f"{handler} parser error: {str(e)}"
             print(f"⚠️ {parser_error}")
 
+        # Debug: Router sonuçları
+        import os
+        if os.environ.get('SCRAPER_DEBUG') == 'true':
+            print(f"\n{'─'*50}")
+            print(f"🔧 ROUTER DEBUG")
+            print(f"{'─'*50}")
+            print(f"Domain: {domain}")
+            print(f"Handler: {handler}")
+            print(f"Site-specific data: {'✅ Found' if site_specific_data else '❌ None'}")
+            if site_specific_data:
+                print(f"  • Title: {site_specific_data.get('title', 'N/A')[:50]}...")
+                print(f"  • Price: {site_specific_data.get('price', 'N/A')}")
+                print(f"  • Brand: {site_specific_data.get('brand', 'N/A')}")
+            if parser_error:
+                print(f"⚠️  Error: {parser_error}")
+            print(f"{'─'*50}\n")
+
         # ============ VERİ ÇIKARMA (FALLBACK CHAIN) ============
         json_ld_data = extract_json_ld(soup)
         meta_data = extract_meta_tags(soup)
+        hidden_json_data = extract_hidden_json_data(soup, html_text) or {}
         html_data = extract_html_elements(soup, normalized_url, html_text)
 
-        # Birleştir (Öncelik: Site-Specific > JSON-LD > Meta > HTML)
+        # Birleştir (Öncelik: Site-Specific > JSON-LD > Hidden JSON > Meta > HTML)
         # datalayer, jsonld, jsonld_datalayer, meta_html handler'ları generic parser kullanır
         special_data = site_specific_data or {}
 
@@ -1534,56 +1742,85 @@ def scrape_product(url):
             'description': None
         }
 
-        # Title fallback
-        title = special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title']
+        # Title fallback (Öncelik: Site-Specific > JSON-LD > Hidden JSON > Meta > HTML)
+        title = (special_data.get('title', '') or
+                 json_ld_data['title'] or
+                 hidden_json_data.get('title', '') or
+                 meta_data['title'] or
+                 html_data['title'])
         if special_data.get('title'):
             data_sources['title'] = handler
         elif json_ld_data['title']:
             data_sources['title'] = 'json-ld'
+        elif hidden_json_data.get('title'):
+            data_sources['title'] = 'hidden-json'
         elif meta_data['title']:
             data_sources['title'] = 'meta-tags'
         elif html_data['title']:
             data_sources['title'] = 'html-selectors'
 
         # Price fallback
-        price = special_data.get('price', 0) or json_ld_data['price'] or meta_data['price'] or html_data['price']
+        price = (special_data.get('price', 0) or
+                 json_ld_data['price'] or
+                 hidden_json_data.get('price', 0) or
+                 meta_data['price'] or
+                 html_data['price'])
         if special_data.get('price', 0):
             data_sources['price'] = handler
         elif json_ld_data['price']:
             data_sources['price'] = 'json-ld'
+        elif hidden_json_data.get('price'):
+            data_sources['price'] = 'hidden-json'
         elif meta_data['price']:
             data_sources['price'] = 'meta-tags'
         elif html_data['price']:
             data_sources['price'] = 'html-selectors'
 
         # Image URL fallback
-        image_url = special_data.get('image_url', '') or json_ld_data['image_url'] or meta_data['image_url'] or html_data['image_url']
+        image_url = (special_data.get('image_url', '') or
+                     json_ld_data['image_url'] or
+                     hidden_json_data.get('image_url', '') or
+                     meta_data['image_url'] or
+                     html_data['image_url'])
         if special_data.get('image_url'):
             data_sources['image_url'] = handler
         elif json_ld_data['image_url']:
             data_sources['image_url'] = 'json-ld'
+        elif hidden_json_data.get('image_url'):
+            data_sources['image_url'] = 'hidden-json'
         elif meta_data['image_url']:
             data_sources['image_url'] = 'meta-tags'
         elif html_data['image_url']:
             data_sources['image_url'] = 'html-selectors'
 
         # Brand fallback
-        brand = special_data.get('brand', '') or json_ld_data['brand'] or meta_data['brand'] or html_data['brand']
+        brand = (special_data.get('brand', '') or
+                 json_ld_data['brand'] or
+                 hidden_json_data.get('brand', '') or
+                 meta_data['brand'] or
+                 html_data['brand'])
         if special_data.get('brand'):
             data_sources['brand'] = handler
         elif json_ld_data['brand']:
             data_sources['brand'] = 'json-ld'
+        elif hidden_json_data.get('brand'):
+            data_sources['brand'] = 'hidden-json'
         elif meta_data['brand']:
             data_sources['brand'] = 'meta-tags'
         elif html_data['brand']:
             data_sources['brand'] = 'html-selectors'
 
         # Description fallback
-        description = special_data.get('description', '') or json_ld_data['description'] or meta_data['description']
+        description = (special_data.get('description', '') or
+                      json_ld_data['description'] or
+                      hidden_json_data.get('description', '') or
+                      meta_data['description'])
         if special_data.get('description'):
             data_sources['description'] = handler
         elif json_ld_data['description']:
             data_sources['description'] = 'json-ld'
+        elif hidden_json_data.get('description'):
+            data_sources['description'] = 'hidden-json'
         elif meta_data['description']:
             data_sources['description'] = 'meta-tags'
 
@@ -1673,15 +1910,25 @@ def scrape_product(url):
 # TEST
 # ============================================
 if __name__ == '__main__':
+    # Her kategoriden test URL'leri - Router sisteminin tüm handler'larını test eder
     test_urls = [
-        'https://www.arcelik.com.tr/9-kg-camasir-makinesi/9120-mp-og-camasir-makinesi',
-        'https://m.trendyol.com/arpelia/tek-kanatli-katlanir-masa-100x50x75-p-939075585',
+        ('Trendyol (API)', 'https://www.trendyol.com/matt-notebook/a5-spiralli-suresiz-planlayici-ajanda-motivasyon-sayfali-potikare-p-797529053'),
+        ('Hepsiburada (dataLayer)', 'https://www.hepsiburada.com/mien-bambu-kapakli-12-adet-cam-baharatlik-seti-kavanoz-seti-ve-16-adet-etiket-hediyeli-p-HBCV00006Y57VM'),
+        ('Karaca (dataLayer)', 'https://www.karaca.com/urun/karaca-tea-break-cay-makinesi-inox-siyah'),
+        ('Enza Home (Shopify)', 'https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/'),
+        ('Normod (Shopify)', 'https://normod.com/products/klem-butter-blush-cagla-yesili-3-3-1-koltuk-takimi-kadife'),
+        ('Arçelik (JSON-LD)', 'https://www.arcelik.com.tr/9-kg-camasir-makinesi/9120-mp-og-camasir-makinesi'),
+        ('IKEA (IKEA parser)', 'https://www.ikea.com.tr/tr/urunler/mutfak-urunleri/mutfak-esyasi-ve-taksim-sistemleri/uppspretta-yagdanlik'),
     ]
 
-    for url in test_urls:
-        print(f"\n{'='*70}")
-        print(f"URL: {url}")
-        print('='*70)
+    import os
+    os.environ['SCRAPER_DEBUG'] = 'true'  # Debug mode aktif
+
+    for site_name, url in test_urls:
+        print(f"\n{'='*80}")
+        print(f"🧪 TEST: {site_name}")
+        print(f"🔗 URL: {url}")
+        print('='*80)
 
         result = scrape_product(url)
 
