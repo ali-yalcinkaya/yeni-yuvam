@@ -561,7 +561,37 @@ def extract_hidden_json_data(soup, html_text):
         except:
             continue
 
-    # Pattern 1: window.__PRELOADED_STATE__ veya __NEXT_DATA__
+    # Pattern 1: Klaviyo tracking (Shopify sites - Normod, Vivense, vb.)
+    # _learnq.push(['track', 'Viewed Product', {...}])
+    klaviyo_pattern = r'var\s+item\s*=\s*({[\s\S]*?});[\s\S]*?_learnq\.push'
+    klaviyo_match = re.search(klaviyo_pattern, html_text)
+    if klaviyo_match:
+        try:
+            json_str = klaviyo_match.group(1)
+            data = json.loads(json_str)
+
+            if not result['title'] and 'Name' in data:
+                result['title'] = data.get('Name', '')
+
+            if not result['price'] and ('Price' in data or 'Value' in data):
+                # Price: "101.360TL" veya Value: "101,360"
+                price_str = data.get('Price', '') or data.get('Value', '')
+                price_str = price_str.replace('TL', '').replace('.', '').replace(',', '.')
+                try:
+                    result['price'] = float(price_str)
+                except:
+                    pass
+
+            if not result['brand'] and 'Brand' in data:
+                result['brand'] = data.get('Brand', '')
+
+            # Eğer bulunduysa döndür
+            if result['title'] or result['price']:
+                return result
+        except:
+            pass
+
+    # Pattern 2: window.__PRELOADED_STATE__ veya __NEXT_DATA__
     patterns = [
         r'window\.__PRELOADED_STATE__\s*=\s*({.+?});',
         r'window\.__NEXT_DATA__\s*=\s*({.+?});',

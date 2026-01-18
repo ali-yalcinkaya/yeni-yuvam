@@ -18,9 +18,9 @@
 - **Altus** - Generic HTML Parser
 
 ### 🪑 Mobilya (Shopify Platform)
-- **Enza Home** - Shopify API Parser
-- **Normod** - Shopify API Parser
-- **Vivense** - Shopify API Parser (yeni)
+- **Enza Home** - Shopify API Parser + Klaviyo Yedek
+- **Normod** - Shopify API Parser + Klaviyo Yedek ✅
+- **Vivense** - Shopify API Parser + Klaviyo Yedek
 - **Alfemo** - Generic HTML (kontrol edilecek)
 
 ### 🛋️ Mobilya (Diğer)
@@ -37,9 +37,9 @@
 - **Taç** - Generic HTML Parser
 - **Chakra** - Generic HTML Parser
 
-### 🎨 Dekorasyon (Next.js Platform)
+### 🎨 Dekorasyon
 - **Zara Home** - Next.js __NEXT_DATA__ Parser
-- **Karaca** - Next.js __NEXT_DATA__ Parser
+- **Karaca** - dataLayer (Google Tag Manager) ✅
 - **H&M Home** - Generic HTML Parser
 
 ### 🔨 DIY & Yapı Market
@@ -55,34 +55,58 @@
 
 ## 🔧 PLATFORM DESTEKLERİ
 
-### 1. Shopify (JSON API)
+### 1. Shopify (JSON API + Klaviyo)
 - Enza Home
-- Normod
+- Normod ✅
 - Vivense
-- *Diğerleri eklenecek*
+- Alfemo (kontrol edilecek)
 
-**Nasıl Çalışır**: `/products/{handle}.json` endpoint'i
+**Nasıl Çalışır**:
+- Öncelik 1: `/products/{handle}.json` endpoint
+- Yedek: Klaviyo tracking `var item = {...}`
+- Fallback: Meta tags
 
-### 2. Next.js (__NEXT_DATA__)
-- Karaca
+### 2. Google Tag Manager (dataLayer)
+- Karaca ✅
+- MediaMarkt
+- Teknosa
+- *GTM kullanan diğer siteler*
+
+**Nasıl Çalışır**:
+- `dataLayer.push()` içinden ecommerce verisi
+- GA Universal: `ecommerce.detail.products[]`
+- GA4: `ecommerce.items[]`
+
+### 3. Next.js (__NEXT_DATA__)
 - Zara Home
-- *Diğerleri eklenecek*
+- *Diğerleri kontrol edilecek*
 
 **Nasıl Çalışır**: `<script id="__NEXT_DATA__">` içinden JSON parse
 
-### 3. WooCommerce (REST API)
+### 4. WooCommerce
 - English Home
 - Madame Coco
 - IKEA Türkiye (kontrol edilecek)
+- Yataş, Taç, Chakra
 - *Diğerleri eklenecek*
 
-**Nasıl Çalışır**: `/wp-json/wc/v3/products` endpoint veya HTML parse
+**Nasıl Çalışır**:
+- WooCommerce HTML selectors
+- `.product_title`, `.woocommerce-Price-amount`
+- Fallback: Meta tags
 
-### 4. Generic HTML Parser
-- Tüm diğer siteler
-- Geliştirilmiş selector'lar
-- JSON-LD desteği
-- Meta tag desteği
+### 5. Generic HTML Parser (Multi-Source)
+- Tüm diğer siteler (Trendyol, Hepsiburada, Arçelik, vb.)
+- **Veri Kaynakları**:
+  1. JSON-LD (Schema.org)
+  2. Hidden JS variables
+  3. Meta tags (OG, Product, Twitter)
+  4. HTML selectors (92 selector)
+    - Magento 2
+    - PrestaShop
+    - OpenCart
+    - Shopware
+    - Custom selectors
 
 ---
 
@@ -147,4 +171,51 @@ python3 test_scraper.py
 - 6 farklı site tipini test eder
 - Hızlı doğrulama için kullanılır
 
+---
+
+## 📚 EK DOKÜMANTASYON
+
+### Veri Kaynağı Detayları
+**Dosya**: `DATA_SOURCES.md`
+
+Her platform için kullanılan veri kaynaklarının öncelik sırası, örnek kodlar ve fallback mekanizmaları.
+
+**İçerik**:
+- Platform bazlı veri kaynağı priority listesi
+- Shopify: JSON API → Klaviyo → Meta Tags
+- GTM: dataLayer → Meta Tags → HTML
+- Next.js: __NEXT_DATA__ → Meta Tags
+- WooCommerce: HTML selectors → Meta Tags
+- Generic: JSON-LD → JS variables → Meta → HTML
+
+### Karaca Debug Rehberi
+**Dosya**: `KARACA_DEBUG.md`
+
+Karaca sitesinden veri çekme sorunları için debug rehberi.
+
+### Debug Scriptleri
+- `debug_scraper.py`: Genel HTML analiz aracı
+- `debug_karaca.py`: Karaca özel debug rehberi
+
+---
+
+## 🎯 TOPLAM KAPSAM
+
+| Kategori | Veri Kaynağı Sayısı | Site Sayısı |
+|----------|---------------------|-------------|
+| **Platform-Özel Parser** | 4 tip | 12 site |
+| **Generic Parser** | 7 kaynak | 20+ site |
+| **Toplam Selector** | 92 | 30+ site |
+| **Test Edilen Platform** | 7 | Mock test |
+
+**Veri Kaynakları:**
+1. Shopify JSON API ⭐⭐⭐⭐⭐
+2. dataLayer (GTM) ⭐⭐⭐⭐⭐
+3. Klaviyo Tracking ⭐⭐⭐⭐
+4. __NEXT_DATA__ ⭐⭐⭐⭐⭐
+5. JSON-LD ⭐⭐⭐⭐
+6. Meta Tags ⭐⭐⭐
+7. HTML Selectors ⭐⭐
+
 **Son Güncelleme**: 2026-01-18
+**Versiyon**: 2.1 (Klaviyo + dataLayer desteği eklendi)
