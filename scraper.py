@@ -11,18 +11,24 @@ AKILLI ÜRÜN SCRAPING MODÜLÜ - YENİ MİMARİ v2.0
 import re
 import json
 import time
+import logging
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urlparse, urljoin
 from datetime import datetime, timedelta
 
+# Logging setup
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
 # Cloudflare bypass için cloudscraper
 try:
     import cloudscraper
     CLOUDSCRAPER_AVAILABLE = True
+    logger.info("✅ cloudscraper yüklü")
 except ImportError:
     CLOUDSCRAPER_AVAILABLE = False
-    print("⚠️ cloudscraper yüklü değil: pip install cloudscraper")
+    logger.warning("⚠️ cloudscraper yüklü değil: pip install cloudscraper")
 
 # ============================================
 # CACHE SİSTEMİ (5 dakika TTL)
@@ -368,15 +374,15 @@ def scrape_api_trendyol(url, session):
 # ============================================
 # IKEA PARSER
 # ============================================
-def scrape_ikea(url, session, soup):
+def scrape_ikea(url, soup, use_cloudscraper=True):
     """IKEA özel parser - Timeout ve bot koruması için optimize"""
     try:
         result = {'title': '', 'price': 0, 'brand': 'IKEA', 'image_url': ''}
 
         # Eğer soup None ise veya içerik boşsa, yeniden fetch et
         if soup is None or not soup.find('body'):
-            print("🔄 IKEA: Cloudscraper ile yeniden deneniyor...")
-            if CLOUDSCRAPER_AVAILABLE:
+            logger.info("🔄 IKEA: Cloudscraper ile yeniden deneniyor...")
+            if CLOUDSCRAPER_AVAILABLE and use_cloudscraper:
                 scraper = cloudscraper.create_scraper(
                     browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True},
                     delay=5
@@ -386,8 +392,11 @@ def scrape_ikea(url, session, soup):
                     if response.status_code == 200:
                         soup = BeautifulSoup(response.content, 'html.parser')
                 except Exception as e:
-                    print(f"⚠️ IKEA cloudscraper hatası: {e}")
+                    logger.error(f"⚠️ IKEA cloudscraper hatası: {e}")
                     return None
+            else:
+                logger.warning("⚠️ IKEA: Cloudscraper kullanılamıyor")
+                return None
 
         # JSON-LD önce dene (IKEA bunu kullanıyor)
         json_ld_scripts = soup.find_all('script', type='application/ld+json')
@@ -451,15 +460,16 @@ def scrape_ikea(url, session, soup):
         return result if (result['title'] and result['price'] > 0) else None
 
     except Exception as e:
-        print(f"⚠️ IKEA parser hatası: {e}")
+        logger.error(f"⚠️ IKEA parser hatası: {e}")
         return None
 
 # ============================================
 # HEPSİBURADA DATALAYER PARSER
 # ============================================
-def scrape_datalayer_hepsiburada(soup, html_text):
+def scrape_datalayer_hepsiburada(url, soup, html_text, use_cloudscraper=True):
     """Hepsiburada dataLayer parser - GA4 + GA Universal hybrid"""
     try:
+        logger.info(f"Trying Hepsiburada dataLayer parser for {url}")
         result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
 
         # dataLayer.push içinden ecommerce verisi çek
@@ -522,25 +532,90 @@ def scrape_datalayer_hepsiburada(soup, html_text):
         return result if result['title'] and result['price'] > 0 else None
 
     except Exception as e:
-        print(f"⚠️ Hepsiburada dataLayer: {str(e)}")
+        logger.error(f"⚠️ Hepsiburada dataLayer: {str(e)}")
+        return None
+
+# ============================================
+# META HTML FALLBACK
+# ============================================
+def scrape_meta_html_fallback(soup, url):
+    """
+    Meta tags ve HTML selectors kullanan fallback parser
+    Tüm site-specific parser'lar başarısız olduğunda kullanılır
+    """
+    try:
+        logger.info(f"Trying meta_html_fallback for {url}")
+        result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
+
+        # Title - OG tags
+        og_title = soup.find('meta', property='og:title')
+        if og_title:
+            result['title'] = og_title.get('content', '').split('|')[0].split('-')[0].strip()
+
+        # Price - OG tags ve common selectors
+        og_price = soup.find('meta', property='og:price:amount') or soup.find('meta', property='product:price:amount')
+        if og_price:
+            try:
+                result['price'] = float(og_price.get('content', '0').replace(',', '.'))
+            except:
+                pass
+
+        # Price selectors (fallback)
+        if not result['price']:
+            price_selectors = [
+                '.product-price', '.price', '.current-price', '.sale-price',
+                '[data-price]', '.pdp-price', 'span[itemprop="price"]',
+                '.product-detail-price', '.product__price', '.ProductPrice'
+            ]
+            for sel in price_selectors:
+                el = soup.select_one(sel)
+                if el:
+                    price_text = el.get('content', '') or el.get_text(strip=True)
+                    price_clean = re.sub(r'[^\d,.]', '', price_text)
+                    price_clean = price_clean.replace('.', '').replace(',', '.')
+                    try:
+                        result['price'] = float(price_clean)
+                        if result['price'] > 0:
+                            break
+                    except:
+                        continue
+
+        # Brand - OG tags
+        og_brand = soup.find('meta', property='og:brand') or soup.find('meta', property='product:brand')
+        if og_brand:
+            result['brand'] = og_brand.get('content', '')
+
+        # Image - OG tags
+        og_image = soup.find('meta', property='og:image')
+        if og_image:
+            result['image_url'] = og_image.get('content', '')
+
+        logger.info(f"Meta/HTML fallback result: title={result['title'][:30] if result['title'] else 'N/A'}, price={result['price']}")
+        return result if (result['title'] or result['price'] > 0) else None
+
+    except Exception as e:
+        logger.error(f"Meta/HTML fallback error: {e}")
         return None
 
 # ============================================
 # KARACA DATALAYER PARSER
 # ============================================
-def scrape_datalayer_karaca(soup, html_text):
+def scrape_datalayer_karaca(url, soup, html_text, use_cloudscraper=True):
     """Karaca özel parser - Çoklu yöntem"""
     try:
+        logger.info(f"Trying Karaca dataLayer parser for {url}")
         result = {'title': '', 'price': 0, 'brand': 'Karaca', 'image_url': ''}
 
-        # Yöntem 1: dataLayer.push ecommerce
+        # Yöntem 1: dataLayer - birden fazla regex pattern dene
         dataLayer_patterns = [
-            r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);',
-            r'dataLayer\s*=\s*\[([^\]]+)\]',
+            r'dataLayer\.push\((.*?)\);',  # dataLayer.push(...)
+            r'var\s+dataLayer\s*=\s*(\[.*?\]);',  # var dataLayer = [...]
+            r'window\.dataLayer\s*=\s*(\[.*?\]);',  # window.dataLayer = [...]
+            r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);',  # Detaylı ecommerce pattern
         ]
 
         for pattern in dataLayer_patterns:
-            matches = re.finditer(pattern, html_text)
+            matches = re.finditer(pattern, html_text, re.DOTALL)
             for match in matches:
                 try:
                     json_str = match.group(1)
@@ -550,10 +625,14 @@ def scrape_datalayer_karaca(soup, html_text):
 
                     data = json.loads(json_str)
 
+                    # data bir array olabilir, kontrol et
+                    if isinstance(data, list):
+                        data = data[0] if data else {}
+
                     if 'ecommerce' in data:
                         ecommerce = data['ecommerce']
 
-                        # detail.products format
+                        # detail.products format (GA Universal)
                         if 'detail' in ecommerce:
                             products = ecommerce['detail'].get('products', [])
                             if products:
@@ -572,9 +651,14 @@ def scrape_datalayer_karaca(soup, html_text):
                                 result['brand'] = item.get('item_brand', 'Karaca')
 
                         if result['title'] and result['price'] > 0:
+                            logger.info(f"Karaca dataLayer başarılı: {result['title'][:30]}")
                             break
-                except:
+                except Exception as e:
+                    logger.debug(f"Karaca dataLayer pattern hatası: {e}")
                     continue
+
+            if result['title'] and result['price'] > 0:
+                break
 
         # Yöntem 2: __NEXT_DATA__ (Karaca Next.js kullanıyor olabilir)
         if not result['title'] or not result['price']:
@@ -648,24 +732,32 @@ def scrape_datalayer_karaca(soup, html_text):
             if og_image:
                 result['image_url'] = og_image.get('content', '')
 
-        print(f"🔍 Karaca sonuç: title={result['title'][:30] if result['title'] else 'N/A'}, price={result['price']}")
+        logger.info(f"Karaca result: title={result['title'][:30] if result['title'] else 'N/A'}, price={result['price']}")
+
+        # Hiçbir yöntem çalışmadıysa scrape_meta_html_fallback dene
+        if not result['title'] and not result['price']:
+            logger.warning("Karaca: Tüm yöntemler başarısız, meta_html_fallback deneniyor")
+            fallback_result = scrape_meta_html_fallback(soup, url)
+            if fallback_result:
+                return fallback_result
 
         return result if (result['title'] or result['price'] > 0) else None
 
     except Exception as e:
-        print(f"⚠️ Karaca parser hatası: {e}")
+        logger.error(f"Karaca parser error: {e}")
         return None
 
 # ============================================
 # WOOCOMMERCE PARSER (English Home, Madame Coco, IKEA vb.)
 # ============================================
-def parse_woocommerce_product(url, session, soup):
+def parse_woocommerce_product(url, soup, use_cloudscraper=False):
     """
     WooCommerce kullanan siteler için özel parser
     1. HTML'den data-product-id çek
     2. Veya HTML içinden schema/meta parse et
     """
     try:
+        logger.info(f"Trying WooCommerce parser for {url}")
         # WooCommerce genelde HTML'de zengin veri saklar
         # Product ID'yi bul
         product_div = soup.find('div', class_='product') or soup.find('div', attrs={'data-product-id': True})
@@ -728,67 +820,62 @@ def parse_woocommerce_product(url, session, soup):
                 }
 
         return None
-    except:
+    except Exception as e:
+        logger.error(f"⚠️ WooCommerce parser hatası: {e}")
         return None
 
 # ============================================
 # SHOPIFY PARSER (Enza Home, Normod vb.)
 # ============================================
-def parse_shopify_product(url, session):
+def parse_shopify_product(url, use_cloudscraper=False):
     """
     Shopify siteler için geliştirilmiş parser
     - JSON API önce dene
     - Başarısız olursa HTML'den çek
     """
     try:
+        logger.info(f"Trying Shopify parser for {url}")
         parsed = urlparse(url)
         domain = parsed.netloc
+        base_url = f"{parsed.scheme}://{domain}"
         path = parsed.path.strip('/')
 
-        # Handle extraction - birden fazla format dene
+        # Handle extraction - URL'den /products/ sonrasını al, query/hash temizle
         handle = ''
 
-        # Format 1: /products/{handle}
-        if 'products/' in path:
-            handle = path.split('products/')[-1].split('/')[0].split('?')[0]
-        # Format 2: /collections/.../products/{handle}
-        elif '/products/' in url:
-            match = re.search(r'/products/([^/?]+)', url)
-            if match:
-                handle = match.group(1)
+        # /products/ pattern'ini bul
+        if '/products/' in url:
+            # URL'den /products/ sonrasını al
+            products_idx = url.find('/products/')
+            if products_idx != -1:
+                after_products = url[products_idx + len('/products/'):]
+                # Query ve hash'i temizle
+                handle = after_products.split('?')[0].split('#')[0].split('/')[0]
         else:
-            # Format 3: /{handle}/ (Enza Home tarzı)
-            segments = [s for s in path.split('/') if s and s not in ['tr', 'en', 'de']]
+            # Enza Home formatı: /{handle}/
+            segments = [s for s in path.split('/') if s and s not in ['tr', 'en', 'de', 'products']]
             if segments:
-                handle = segments[-1].split('?')[0]
+                handle = segments[-1].split('?')[0].split('#')[0]
 
         if not handle:
-            print(f"⚠️ Shopify: Handle bulunamadı - URL: {url}")
+            logger.warning(f"Shopify: Handle bulunamadı - URL: {url}")
             return None
 
-        print(f"🔍 Shopify handle: {handle}")
+        logger.info(f"Shopify handle: {handle}")
 
         # Yöntem 1: JSON API
-        json_url = f"https://{domain}/products/{handle}.json"
+        json_url = f"{base_url}/products/{handle}.json"
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'tr-TR,tr;q=0.9',
-        }
+        # Shopify genelde Cloudflare kullanmaz, ama parametre gelirse kullan
+        response, error = fetch_with_retry(json_url, timeout=20, use_cloudscraper=use_cloudscraper)
 
-        try:
-            if CLOUDSCRAPER_AVAILABLE:
-                scraper = cloudscraper.create_scraper()
-                response = scraper.get(json_url, headers=headers, timeout=15)
-            else:
-                response = session.get(json_url, headers=headers, timeout=15, proxies={})
-
-            if response.status_code == 200:
+        if response and response.status_code == 200:
+            try:
                 data = response.json()
-                product = data.get('product', {})
+                # Shopify API yanıtı direkt product objesi VEYA {"product": {...}} formatında olabilir
+                product = data.get('product', data)
 
-                if product:
+                if product and isinstance(product, dict):
                     variants = product.get('variants', [])
                     first_variant = variants[0] if variants else {}
 
@@ -814,10 +901,10 @@ def parse_shopify_product(url, session):
                     }
 
                     if result['title'] and result['price'] > 0:
-                        print(f"✅ Shopify JSON API başarılı: {result['title'][:50]}")
+                        logger.info(f"✅ Shopify JSON API başarılı: {result['title'][:50]}")
                         return result
-        except Exception as e:
-            print(f"⚠️ Shopify JSON API hatası: {e}")
+            except Exception as e:
+                logger.warning(f"Shopify JSON parse hatası: {e}")
 
         # Yöntem 2: HTML'den Klaviyo/dataLayer çek
         print(f"🔄 Shopify JSON başarısız, HTML deneniyor...")
@@ -904,7 +991,7 @@ def parse_shopify_product(url, session):
 # ============================================
 # NEXT.JS PARSER (Karaca, Zara Home vb.)
 # ============================================
-def parse_nextjs_product(soup, domain):
+def parse_nextjs_product(url, soup, use_cloudscraper=False):
     """
     Next.js kullanan siteler için özel parser
     __NEXT_DATA__ script'inden veri çıkarır
@@ -912,7 +999,12 @@ def parse_nextjs_product(soup, domain):
     import os
     DEBUG = os.environ.get('SCRAPER_DEBUG', 'false').lower() == 'true'
 
+    # Extract domain from URL
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc
+
     try:
+        logger.info(f"Trying Next.js parser for {url}")
         # __NEXT_DATA__ script'ini bul
         next_data_script = soup.find('script', id='__NEXT_DATA__')
         if not next_data_script or not next_data_script.string:
@@ -981,7 +1073,8 @@ def parse_nextjs_product(soup, domain):
                 pass
 
         return None
-    except:
+    except Exception as e:
+        logger.error(f"⚠️ Next.js parser hatası: {e}")
         return None
 
 # ============================================
@@ -1785,28 +1878,29 @@ def extract_with_regex(soup, title='', existing_specs=None):
 # ============================================
 # 5. USER-AGENT ROTASYONU VE RETRY
 # ============================================
-def fetch_with_retry(url, max_retries=3):
+def fetch_with_retry(url, max_retries=3, use_cloudscraper=False, timeout=30):
     """
     Cloudflare bypass ile retry mekanizması
-    1. Önce cloudscraper dene (Cloudflare bypass)
-    2. Başarısız olursa normal requests dene
+
+    Args:
+        url: Fetch edilecek URL
+        max_retries: Maksimum deneme sayısı
+        use_cloudscraper: Cloudscraper kullan (Cloudflare bypass için)
+        timeout: Timeout süresi (saniye)
+
+    Returns:
+        (response, error): Response objesi ve hata mesajı
     """
-
-    # Cloudflare korumalı siteler
-    CLOUDFLARE_SITES = [
-        'hepsiburada.com', 'vatanbilgisayar.com', 'teknosa.com',
-        'mediamarkt.com.tr', 'ikea.com.tr', 'n11.com', 'ciceksepeti.com',
-        'trendyol.com'
-    ]
-
-    domain = urlparse(url).netloc.lower()
-    use_cloudscraper = CLOUDSCRAPER_AVAILABLE and any(site in domain for site in CLOUDFLARE_SITES)
+    # Cloudscraper kullanılacaksa ve mevcut değilse uyar
+    if use_cloudscraper and not CLOUDSCRAPER_AVAILABLE:
+        logger.warning("Cloudscraper istendi ama yüklü değil, normal requests kullanılacak")
+        use_cloudscraper = False
 
     for attempt in range(max_retries):
         headers = USER_AGENTS[attempt % len(USER_AGENTS)].copy()
 
         try:
-            if use_cloudscraper:
+            if use_cloudscraper and CLOUDSCRAPER_AVAILABLE:
                 # Cloudscraper kullan
                 scraper = cloudscraper.create_scraper(
                     browser={
@@ -1816,16 +1910,16 @@ def fetch_with_retry(url, max_retries=3):
                     },
                     delay=3
                 )
-                response = scraper.get(url, headers=headers, timeout=30, allow_redirects=True)
+                response = scraper.get(url, headers=headers, timeout=timeout, allow_redirects=True)
             else:
                 # Normal requests kullan
                 session = requests.Session()
                 session.trust_env = False
-                response = session.get(url, headers=headers, timeout=20, allow_redirects=True, proxies={})
+                response = session.get(url, headers=headers, timeout=timeout, allow_redirects=True, proxies={})
 
             # 403/503 hatası
             if response.status_code in [403, 503]:
-                print(f"⚠️ HTTP {response.status_code} - Attempt {attempt + 1}/{max_retries}")
+                logger.warning(f"HTTP {response.status_code} - Attempt {attempt + 1}/{max_retries}")
                 if attempt < max_retries - 1:
                     time.sleep(2 + attempt)  # Progressive delay
                     continue
@@ -1840,14 +1934,14 @@ def fetch_with_retry(url, max_retries=3):
             return response, None
 
         except requests.exceptions.Timeout:
-            print(f"⚠️ Timeout - Attempt {attempt + 1}/{max_retries}")
+            logger.warning(f"Timeout - Attempt {attempt + 1}/{max_retries}")
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
             return None, 'Site yanıt vermedi (timeout)'
 
         except Exception as e:
-            print(f"⚠️ Error: {type(e).__name__}: {str(e)[:100]}")
+            logger.error(f"Error: {type(e).__name__}: {str(e)[:100]}")
             if attempt < max_retries - 1:
                 time.sleep(2)
                 continue
@@ -1887,16 +1981,23 @@ def scrape_product(url):
         domain = urlparse(normalized_url).netloc.lower()
         wait_for_rate_limit(domain)
 
-        # Önce masaüstü URL'i dene
-        response, error = fetch_with_retry(normalized_url)
+        # Cloudflare korumalı siteleri tanımla
+        cloudflare_sites = ['hepsiburada.com', 'ikea.com', 'karaca.com', 'vatan.com',
+                            'teknosa.com', 'mediamarkt.com', 'n11.com', 'ciceksepeti.com']
+        use_cf = any(site in domain for site in cloudflare_sites)
+
+        # Önce masaüstü URL'i dene - timeout'u sitenin özelliğine göre ayarla
+        timeout = 30 if 'ikea' in domain else 20
+        response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
 
         # Masaüstü başarısız olduysa ve orijinal mobil ise, mobil'i dene
         if not response and was_mobile:
-            response, error = fetch_with_retry(url)
+            response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
             if response:
                 normalized_url = url  # Mobil çalıştı, onu kullan
 
-        if not response:
+        if not response or response.status_code != 200:
+            logger.error(f"Failed to fetch {normalized_url}: {error}")
             return {'success': False, 'error': error or 'Bilinmeyen hata'}
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -1915,49 +2016,60 @@ def scrape_product(url):
         # Handler'a göre özel parser çalıştır
         try:
             if handler == 'api_trendyol':
+                logger.info(f"Trying {handler} for {normalized_url}")
                 site_specific_data = scrape_api_trendyol(normalized_url, session)
 
             elif handler == 'shopify':
-                site_specific_data = parse_shopify_product(normalized_url, session)
+                logger.info(f"Trying {handler} for {normalized_url}")
+                site_specific_data = parse_shopify_product(normalized_url, use_cloudscraper=False)
 
             elif handler == 'nextjs':
-                site_specific_data = parse_nextjs_product(soup, domain)
+                logger.info(f"Trying {handler} for {normalized_url}")
+                site_specific_data = parse_nextjs_product(normalized_url, soup, use_cloudscraper=False)
 
             elif handler == 'woocommerce':
-                site_specific_data = parse_woocommerce_product(normalized_url, session, soup)
+                logger.info(f"Trying {handler} for {normalized_url}")
+                site_specific_data = parse_woocommerce_product(normalized_url, soup, use_cloudscraper=False)
 
             elif handler == 'ikea':
-                site_specific_data = scrape_ikea(normalized_url, session, soup)
+                logger.info(f"Trying {handler} for {normalized_url}")
+                site_specific_data = scrape_ikea(normalized_url, soup, use_cloudscraper=True)
 
             elif handler == 'datalayer':
                 # Site-specific dataLayer parsers
                 if 'hepsiburada' in domain:
-                    site_specific_data = scrape_datalayer_hepsiburada(soup, html_text)
+                    logger.info(f"Trying Hepsiburada dataLayer for {normalized_url}")
+                    site_specific_data = scrape_datalayer_hepsiburada(normalized_url, soup, html_text, use_cloudscraper=True)
                 elif 'karaca' in domain:
-                    site_specific_data = scrape_datalayer_karaca(soup, html_text)
+                    logger.info(f"Trying Karaca dataLayer for {normalized_url}")
+                    site_specific_data = scrape_datalayer_karaca(normalized_url, soup, html_text, use_cloudscraper=True)
                 else:
                     # Generic dataLayer (N11, Çiçeksepeti, MediaMarkt, Teknosa, Vatan)
+                    logger.info(f"Trying generic dataLayer for {normalized_url}")
                     hidden_data = extract_hidden_json_data(soup, html_text)
                     if hidden_data and (hidden_data.get('title') or hidden_data.get('price')):
                         site_specific_data = hidden_data
 
             elif handler == 'jsonld':
+                logger.info(f"Trying {handler} for {normalized_url}")
                 # JSON-LD parser (Arçelik, Beko, Vestel, Bosch, Siemens, Bellona, İstikbal, Yataş, Altus)
                 # Generic fallback'te extract_json_ld zaten çağrılıyor, buraya özel bir şey gerekmez
                 site_specific_data = None
 
             elif handler == 'jsonld_datalayer':
+                logger.info(f"Trying {handler} for {normalized_url}")
                 # Hybrid: JSON-LD + dataLayer (Samsung, Koçtaş)
                 # İki kaynak da generic fallback'te birleşiyor
                 site_specific_data = None
 
             elif handler == 'meta_html':
+                logger.info(f"Trying {handler} for {normalized_url}")
                 # Meta tags + HTML fallback (Doğtaş, Mondi, Bauhaus)
-                # Generic fallback chain zaten bu işi yapıyor
-                site_specific_data = None
+                site_specific_data = scrape_meta_html_fallback(soup, normalized_url)
 
         except Exception as e:
             parser_error = f"{handler} parser error: {str(e)}"
+            logger.error(parser_error)
             print(f"⚠️ {parser_error}")
 
         # Debug: Router sonuçları

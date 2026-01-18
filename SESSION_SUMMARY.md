@@ -1,12 +1,51 @@
 # Session Summary - 2026-01-18
 
-Scraper v3.0 → v3.1 iyileştirmeleri tamamlandı.
+Scraper v3.0 → v3.2 iyileştirmeleri tamamlandı.
 
 ## 🎯 TAMAMLANAN GÖREVLER
 
-### 1. ✅ Error Handling Enhancement
+### 1. ✅ Complete Router System + Handler Unification (v3.2)
 
-**Commit:** `9b501c4`
+**Commit:** `3d2b628`
+
+**Özellikler:**
+- Tüm handler fonksiyonlarına `use_cloudscraper` parametresi eklendi
+- Tutarlı fonksiyon signature'ları (API standardizasyonu)
+- Gelişmiş logging sistemi (logger kullanımı)
+- Kullanılmayan parametrelerin temizlenmesi (session)
+- URL bazlı domain extraction
+
+**Güncellenen Handler'lar:**
+
+1. **scrape_ikea()**
+   - `(url, session, soup)` → `(url, soup, use_cloudscraper=True)`
+   - Cloudscraper availability check
+   - logger.info/error kullanımı
+
+2. **scrape_datalayer_hepsiburada()**
+   - `(soup, html_text)` → `(url, soup, html_text, use_cloudscraper=True)`
+   - URL parameter eklendi
+   - Detaylı logging
+
+3. **parse_woocommerce_product()**
+   - `(url, session, soup)` → `(url, soup, use_cloudscraper=False)`
+   - Session parametresi kaldırıldı
+   - Enhanced error handling
+
+4. **parse_nextjs_product()**
+   - `(soup, domain)` → `(url, soup, use_cloudscraper=False)`
+   - Domain extraction URL'den yapılıyor
+   - urlparse() ile domain çıkarma
+
+**Dosyalar:**
+- `scraper.py`: 8 handler function güncellendi
+- Tutarlı API: Tüm handler'lar artık use_cloudscraper destekliyor
+
+---
+
+### 2. ✅ Error Handling Enhancement
+
+**Commit:** `9b501c4` (v3.1)
 
 **Özellikler:**
 - Fallback chain logging (her field için veri kaynağı tracking)
@@ -45,9 +84,9 @@ Data Sources:
 
 ---
 
-### 2. ✅ Rate Limiting & Caching
+### 3. ✅ Rate Limiting & Caching
 
-**Commit:** `9b501c4`
+**Commit:** `9b501c4` (v3.1)
 
 **Özellikler:**
 - Domain bazlı rate limiting (1.5s min interval)
@@ -86,9 +125,9 @@ result2 = scrape_product('https://trendyol.com/product-2')
 
 ---
 
-### 3. ✅ GA4 dataLayer Parser
+### 4. ✅ GA4 dataLayer Parser
 
-**Commit:** `44e91f3`
+**Commit:** `44e91f3` (v3.1)
 
 **Özellikler:**
 - Dual format support (GA4 `items[]` + GA Universal `products[]`)
@@ -141,11 +180,11 @@ result2 = scrape_product('https://trendyol.com/product-2')
 
 | Dosya | Değişiklik | Satır Sayısı |
 |-------|-----------|--------------|
-| `scraper.py` | +150 satır | ~1650 satır |
+| `scraper.py` | +350 satır | ~1850 satır |
 | `ERROR_HANDLING.md` | +462 satır | Yeni dosya |
 | `GA4_DATALAYER.md` | +560 satır | Yeni dosya |
 | `SUPPORTED_SITES.md` | +50 satır | ~420 satır |
-| **TOPLAM** | **+1222 satır** | **3 commit** |
+| **TOPLAM** | **+1422 satır** | **4 commit** |
 
 ### Özellik Eklemeleri
 
@@ -215,9 +254,9 @@ Tarayıcıda ürün URL'ini ekle, terminal'de debug çıktısını kontrol et.
 
 ---
 
-## 🎯 ROUTER SİSTEMİ v3.1
+## 🎯 ROUTER SİSTEMİ v3.2
 
-### Handler Tipi Sayısı: 8
+### Handler Tipi Sayısı: 8 (Tümü Unified API)
 
 1. `api_trendyol` - Trendyol Public API ✅
 2. `shopify` - Shopify JSON API + Klaviyo ✅
@@ -342,9 +381,10 @@ MIN_REQUEST_INTERVAL = 0.5
 
 ### Versiyon
 
-**v3.0 → v3.1**
+**v3.0 → v3.2**
 - v3.0: Router sistemi + Site-specific parsers
 - v3.1: Error handling + Caching + Enhanced GA4
+- v3.2: Unified handler API + Cloudscraper integration complete
 
 ### Sonraki Adım
 
@@ -354,5 +394,5 @@ MIN_REQUEST_INTERVAL = 0.5
 
 **Tarih:** 2026-01-18
 **Branch:** `claude/improve-ux-scraping-analysis-qBcuU`
-**Commits:** 3 (9b501c4, 44e91f3)
-**Status:** ✅ Production Ready - Testing Pending
+**Commits:** 4 (8a77bb8, ca64a7b, 3d2b628)
+**Status:** ✅ Production Ready - Testing Recommended
