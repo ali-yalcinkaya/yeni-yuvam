@@ -16,6 +16,14 @@ import requests
 from urllib.parse import urlparse, urljoin
 from datetime import datetime, timedelta
 
+# Cloudflare bypass için cloudscraper
+try:
+    import cloudscraper
+    CLOUDSCRAPER_AVAILABLE = True
+except ImportError:
+    CLOUDSCRAPER_AVAILABLE = False
+    print("⚠️ cloudscraper yüklü değil: pip install cloudscraper")
+
 # ============================================
 # CACHE SİSTEMİ (5 dakika TTL)
 # ============================================
@@ -361,52 +369,89 @@ def scrape_api_trendyol(url, session):
 # IKEA PARSER
 # ============================================
 def scrape_ikea(url, session, soup):
-    """IKEA özel parser - Meta + HTML"""
+    """IKEA özel parser - Timeout ve bot koruması için optimize"""
     try:
         result = {'title': '', 'price': 0, 'brand': 'IKEA', 'image_url': ''}
 
-        # Title extraction
+        # Eğer soup None ise veya içerik boşsa, yeniden fetch et
+        if soup is None or not soup.find('body'):
+            print("🔄 IKEA: Cloudscraper ile yeniden deneniyor...")
+            if CLOUDSCRAPER_AVAILABLE:
+                scraper = cloudscraper.create_scraper(
+                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True},
+                    delay=5
+                )
+                try:
+                    response = scraper.get(url, timeout=45)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.content, 'html.parser')
+                except Exception as e:
+                    print(f"⚠️ IKEA cloudscraper hatası: {e}")
+                    return None
+
+        # JSON-LD önce dene (IKEA bunu kullanıyor)
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+        for script in json_ld_scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, list):
+                    data = next((item for item in data if item.get('@type') == 'Product'), {})
+                if data.get('@type') == 'Product':
+                    result['title'] = data.get('name', '')
+                    offers = data.get('offers', {})
+                    if isinstance(offers, list):
+                        offers = offers[0]
+                    if offers:
+                        result['price'] = float(offers.get('price', 0))
+                    img = data.get('image', '')
+                    result['image_url'] = img[0] if isinstance(img, list) else img
+
+                    if result['title'] and result['price'] > 0:
+                        return result
+            except:
+                continue
+
+        # Meta tags
         og_title = soup.find('meta', property='og:title')
-        if og_title:
-            result['title'] = og_title.get('content', '')
-        else:
-            print(f"⚠️ IKEA: og:title meta tag bulunamadı")
+        if og_title and not result['title']:
+            result['title'] = og_title.get('content', '').split('|')[0].strip()
 
-        # Price extraction with multiple selectors
-        price_selectors = ['.pip-price', '.price-module__container', '[data-testid="price"]', '.product-pip__price']
-        price_found = False
-        for selector in price_selectors:
-            el = soup.select_one(selector)
-            if el:
-                price_text = el.get_text(strip=True)
-                result['price'] = normalize_price(price_text)
-                if result['price'] > 0:
-                    price_found = True
-                    break
-
-        if not price_found:
-            print(f"⚠️ IKEA: Fiyat bulunamadı (selectors: {', '.join(price_selectors)})")
-
-        # Image extraction
         og_image = soup.find('meta', property='og:image')
-        if og_image:
+        if og_image and not result['image_url']:
             result['image_url'] = og_image.get('content', '')
-        else:
-            # Fallback: product:price:amount meta tag
-            meta_price = soup.find('meta', property='product:price:amount')
-            if meta_price:
-                result['price'] = normalize_price(meta_price.get('content', '0'))
 
-        # Veri kalitesi kontrolü
-        if not result['title']:
-            print(f"⚠️ IKEA: Başlık boş")
-        if not result['price'] or result['price'] <= 0:
-            print(f"⚠️ IKEA: Geçerli fiyat bulunamadı")
+        # Fiyat için product:price:amount meta tag
+        price_meta = soup.find('meta', property='product:price:amount')
+        if price_meta and not result['price']:
+            try:
+                result['price'] = float(price_meta.get('content', '0').replace(',', '.'))
+            except:
+                pass
 
-        return result if result['title'] and result['price'] > 0 else None
+        # HTML selectors
+        if not result['price']:
+            price_selectors = [
+                '.pip-temp-price__integer', '.pip-price',
+                '[data-price]', '.product-pip__price',
+                '.range-revamp-pip-price-package__main-price'
+            ]
+            for sel in price_selectors:
+                el = soup.select_one(sel)
+                if el:
+                    price_text = el.get_text(strip=True)
+                    price_clean = re.sub(r'[^\d]', '', price_text)
+                    if price_clean:
+                        try:
+                            result['price'] = float(price_clean)
+                            if result['price'] > 0:
+                                break
+                        except:
+                            continue
+
+        return result if (result['title'] and result['price'] > 0) else None
 
     except Exception as e:
-        print(f"⚠️ IKEA: Unexpected error - {str(e)}")
+        print(f"⚠️ IKEA parser hatası: {e}")
         return None
 
 # ============================================
@@ -484,48 +529,131 @@ def scrape_datalayer_hepsiburada(soup, html_text):
 # KARACA DATALAYER PARSER
 # ============================================
 def scrape_datalayer_karaca(soup, html_text):
-    """Karaca özel dataLayer parser - GA Universal format"""
+    """Karaca özel parser - Çoklu yöntem"""
     try:
         result = {'title': '', 'price': 0, 'brand': 'Karaca', 'image_url': ''}
 
-        # dataLayer.push içinden ecommerce.detail.products çek
-        dataLayer_pattern = r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);'
-        matches = re.finditer(dataLayer_pattern, html_text)
+        # Yöntem 1: dataLayer.push ecommerce
+        dataLayer_patterns = [
+            r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);',
+            r'dataLayer\s*=\s*\[([^\]]+)\]',
+        ]
 
-        for match in matches:
-            try:
-                json_str = match.group(1)
-                data = json.loads(json_str)
+        for pattern in dataLayer_patterns:
+            matches = re.finditer(pattern, html_text)
+            for match in matches:
+                try:
+                    json_str = match.group(1)
+                    # Trailing comma fix
+                    json_str = re.sub(r',\s*}', '}', json_str)
+                    json_str = re.sub(r',\s*]', ']', json_str)
 
-                if 'ecommerce' in data:
-                    ecommerce = data['ecommerce']
+                    data = json.loads(json_str)
 
-                    # GA Universal format (Karaca bunu kullanıyor)
-                    if 'detail' in ecommerce and 'products' in ecommerce['detail']:
-                        products = ecommerce['detail']['products']
-                        if products and len(products) > 0:
-                            product = products[0]
-                            result['title'] = product.get('name', '')
-                            result['price'] = float(product.get('price', 0))
-                            result['brand'] = product.get('brand', 'Karaca')
+                    if 'ecommerce' in data:
+                        ecommerce = data['ecommerce']
 
-                            # Eğer bulunduysa döndür
-                            if result['title'] and result['price'] > 0:
-                                break
+                        # detail.products format
+                        if 'detail' in ecommerce:
+                            products = ecommerce['detail'].get('products', [])
+                            if products:
+                                product = products[0]
+                                result['title'] = product.get('name', '')
+                                result['price'] = float(product.get('price', 0))
+                                result['brand'] = product.get('brand', 'Karaca')
 
-            except:
-                continue
+                        # items format (GA4)
+                        if 'items' in ecommerce:
+                            items = ecommerce['items']
+                            if items:
+                                item = items[0]
+                                result['title'] = item.get('item_name', '') or item.get('name', '')
+                                result['price'] = float(item.get('price', 0))
+                                result['brand'] = item.get('item_brand', 'Karaca')
 
-        # Image için meta tag kullan
+                        if result['title'] and result['price'] > 0:
+                            break
+                except:
+                    continue
+
+        # Yöntem 2: __NEXT_DATA__ (Karaca Next.js kullanıyor olabilir)
+        if not result['title'] or not result['price']:
+            next_data = soup.find('script', id='__NEXT_DATA__')
+            if next_data and next_data.string:
+                try:
+                    data = json.loads(next_data.string)
+                    page_props = data.get('props', {}).get('pageProps', {})
+
+                    # Çeşitli key'leri dene
+                    product = (page_props.get('product') or
+                              page_props.get('productDetail') or
+                              page_props.get('initialProduct') or
+                              {})
+
+                    if product:
+                        result['title'] = product.get('name', '') or product.get('title', '')
+                        result['price'] = float(product.get('price', 0) or product.get('salePrice', 0) or product.get('discountedPrice', 0))
+                        result['image_url'] = product.get('image', '') or product.get('mainImage', '') or product.get('imageUrl', '')
+                except:
+                    pass
+
+        # Yöntem 3: JSON-LD
+        if not result['title'] or not result['price']:
+            json_ld_scripts = soup.find_all('script', type='application/ld+json')
+            for script in json_ld_scripts:
+                try:
+                    data = json.loads(script.string)
+                    if isinstance(data, list):
+                        data = next((item for item in data if item.get('@type') == 'Product'), {})
+                    if data.get('@type') == 'Product':
+                        result['title'] = data.get('name', '') or result['title']
+                        offers = data.get('offers', {})
+                        if isinstance(offers, list):
+                            offers = offers[0]
+                        if offers and not result['price']:
+                            result['price'] = float(offers.get('price', 0))
+                        if not result['image_url']:
+                            img = data.get('image', '')
+                            result['image_url'] = img[0] if isinstance(img, list) else img
+                except:
+                    continue
+
+        # Yöntem 4: Meta tags + HTML (son çare)
+        if not result['title']:
+            og_title = soup.find('meta', property='og:title')
+            if og_title:
+                result['title'] = og_title.get('content', '').split('|')[0].split('-')[0].strip()
+
+        if not result['price']:
+            price_selectors = [
+                '.product-price', '.price', '.current-price',
+                '[data-price]', '.sale-price', '.pdp-price',
+                'span[itemprop="price"]', '.product-detail-price'
+            ]
+            for sel in price_selectors:
+                el = soup.select_one(sel)
+                if el:
+                    price_text = el.get('content', '') or el.get_text(strip=True)
+                    price_clean = re.sub(r'[^\d,.]', '', price_text)
+                    price_clean = price_clean.replace('.', '').replace(',', '.')
+                    try:
+                        result['price'] = float(price_clean)
+                        if result['price'] > 0:
+                            break
+                    except:
+                        continue
+
         if not result['image_url']:
             og_image = soup.find('meta', property='og:image')
             if og_image:
                 result['image_url'] = og_image.get('content', '')
 
-        return result if result['title'] and result['price'] > 0 else None
+        print(f"🔍 Karaca sonuç: title={result['title'][:30] if result['title'] else 'N/A'}, price={result['price']}")
+
+        return result if (result['title'] or result['price'] > 0) else None
 
     except Exception as e:
-        print(f"⚠️ Karaca dataLayer: {str(e)}")
+        print(f"⚠️ Karaca parser hatası: {e}")
         return None
 
 # ============================================
@@ -608,65 +736,169 @@ def parse_woocommerce_product(url, session, soup):
 # ============================================
 def parse_shopify_product(url, session):
     """
-    Shopify kullanan siteler için özel parser
-    /products/{handle}.json endpoint'ini kullanır
-
-    Desteklenen URL formatları:
-    - https://normod.com/products/klem-butter-blush-3-3-1-koltuk-takimi
-    - https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/
-    - https://vivense.com/products/chester-koltuk?variant=123
+    Shopify siteler için geliştirilmiş parser
+    - JSON API önce dene
+    - Başarısız olursa HTML'den çek
     """
     try:
         parsed = urlparse(url)
+        domain = parsed.netloc
         path = parsed.path.strip('/')
 
-        # Handle extraction
+        # Handle extraction - birden fazla format dene
         handle = ''
 
         # Format 1: /products/{handle}
         if 'products/' in path:
             handle = path.split('products/')[-1].split('/')[0].split('?')[0]
+        # Format 2: /collections/.../products/{handle}
+        elif '/products/' in url:
+            match = re.search(r'/products/([^/?]+)', url)
+            if match:
+                handle = match.group(1)
         else:
-            # Format 2: /{handle}/ (Enza Home formatı)
-            # Path segments'leri al ve son non-empty segment'i kullan
-            segments = [s for s in path.split('/') if s]
+            # Format 3: /{handle}/ (Enza Home tarzı)
+            segments = [s for s in path.split('/') if s and s not in ['tr', 'en', 'de']]
             if segments:
-                # Son segment query string içerebilir, temizle
                 handle = segments[-1].split('?')[0]
 
         if not handle:
             print(f"⚠️ Shopify: Handle bulunamadı - URL: {url}")
             return None
 
-        # Shopify JSON endpoint
-        json_url = f"{parsed.scheme}://{parsed.netloc}/products/{handle}.json"
+        print(f"🔍 Shopify handle: {handle}")
 
-        headers = USER_AGENTS[0].copy()
-        response = session.get(json_url, headers=headers, timeout=15, proxies={})
+        # Yöntem 1: JSON API
+        json_url = f"https://{domain}/products/{handle}.json"
 
-        if response.status_code == 200:
-            data = response.json()
-            product = data.get('product', {})
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'tr-TR,tr;q=0.9',
+        }
 
-            if product:
-                # İlk variant'ı al
-                variants = product.get('variants', [])
-                first_variant = variants[0] if variants else {}
+        try:
+            if CLOUDSCRAPER_AVAILABLE:
+                scraper = cloudscraper.create_scraper()
+                response = scraper.get(json_url, headers=headers, timeout=15)
+            else:
+                response = session.get(json_url, headers=headers, timeout=15, proxies={})
 
-                # Görseller
-                images = product.get('images', [])
-                image_url = images[0].get('src', '') if images else ''
+            if response.status_code == 200:
+                data = response.json()
+                product = data.get('product', {})
 
-                return {
-                    'title': product.get('title', ''),
-                    'price': float(first_variant.get('price', 0)),
-                    'image_url': image_url,
-                    'brand': product.get('vendor', ''),
-                    'description': product.get('body_html', ''),
-                }
+                if product:
+                    variants = product.get('variants', [])
+                    first_variant = variants[0] if variants else {}
+
+                    # Fiyat - string olarak gelir
+                    price_str = first_variant.get('price', '0')
+                    try:
+                        price = float(price_str)
+                        # Kuruş kontrolü (Türk siteleri için)
+                        if price > 50000 and '.' not in str(price_str):
+                            price = price / 100
+                    except:
+                        price = 0
+
+                    images = product.get('images', [])
+                    image_url = images[0].get('src', '') if images else ''
+
+                    result = {
+                        'title': product.get('title', ''),
+                        'price': price,
+                        'image_url': image_url,
+                        'brand': product.get('vendor', ''),
+                        'description': BeautifulSoup(product.get('body_html', '') or '', 'html.parser').get_text(strip=True)[:500],
+                    }
+
+                    if result['title'] and result['price'] > 0:
+                        print(f"✅ Shopify JSON API başarılı: {result['title'][:50]}")
+                        return result
+        except Exception as e:
+            print(f"⚠️ Shopify JSON API hatası: {e}")
+
+        # Yöntem 2: HTML'den Klaviyo/dataLayer çek
+        print(f"🔄 Shopify JSON başarısız, HTML deneniyor...")
+
+        try:
+            html_url = url
+            if CLOUDSCRAPER_AVAILABLE:
+                scraper = cloudscraper.create_scraper()
+                response = scraper.get(html_url, headers=USER_AGENTS[0], timeout=15)
+            else:
+                response = session.get(html_url, headers=USER_AGENTS[0], timeout=15, proxies={})
+
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                html_text = response.text
+
+                result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
+
+                # Klaviyo tracking (var item = {...})
+                klaviyo_pattern = r'var\s+item\s*=\s*({[\s\S]*?});'
+                klaviyo_match = re.search(klaviyo_pattern, html_text)
+                if klaviyo_match:
+                    try:
+                        item_data = json.loads(klaviyo_match.group(1))
+                        result['title'] = item_data.get('Name', '') or item_data.get('ProductName', '')
+
+                        price_val = item_data.get('Price', '') or item_data.get('Value', '')
+                        if price_val:
+                            price_str = str(price_val).replace('TL', '').replace('.', '').replace(',', '.').strip()
+                            try:
+                                result['price'] = float(price_str)
+                            except:
+                                pass
+
+                        result['brand'] = item_data.get('Brand', '')
+                        result['image_url'] = item_data.get('ImageURL', '') or item_data.get('ProductImageURL', '')
+                    except:
+                        pass
+
+                # Meta tags fallback
+                if not result['title']:
+                    og_title = soup.find('meta', property='og:title')
+                    if og_title:
+                        result['title'] = og_title.get('content', '').split('|')[0].split('–')[0].strip()
+
+                if not result['price']:
+                    # Fiyat için çeşitli selectors dene
+                    price_selectors = [
+                        '.product__price', '.price', '.product-price',
+                        '[data-product-price]', '.money', '.current-price',
+                        'span[data-price]', '.ProductPrice'
+                    ]
+                    for sel in price_selectors:
+                        el = soup.select_one(sel)
+                        if el:
+                            price_text = el.get_text(strip=True)
+                            price_clean = re.sub(r'[^\d,.]', '', price_text)
+                            price_clean = price_clean.replace('.', '').replace(',', '.')
+                            try:
+                                result['price'] = float(price_clean)
+                                if result['price'] > 0:
+                                    break
+                            except:
+                                continue
+
+                if not result['image_url']:
+                    og_image = soup.find('meta', property='og:image')
+                    if og_image:
+                        result['image_url'] = og_image.get('content', '')
+
+                if result['title'] or result['price'] > 0:
+                    print(f"✅ Shopify HTML başarılı: {result['title'][:50] if result['title'] else 'N/A'}")
+                    return result
+
+        except Exception as e:
+            print(f"⚠️ Shopify HTML hatası: {e}")
 
         return None
-    except:
+
+    except Exception as e:
+        print(f"⚠️ Shopify parser hatası: {e}")
         return None
 
 # ============================================
@@ -1555,23 +1787,49 @@ def extract_with_regex(soup, title='', existing_specs=None):
 # ============================================
 def fetch_with_retry(url, max_retries=3):
     """
-    User-Agent rotasyonu ile retry mekanizması
-    403/503 hatası alırsa farklı UA ile tekrar dener
+    Cloudflare bypass ile retry mekanizması
+    1. Önce cloudscraper dene (Cloudflare bypass)
+    2. Başarısız olursa normal requests dene
     """
-    session = requests.Session()
-    # Proxy'leri devre dışı bırak (Replit ortamı için)
-    session.trust_env = False
+
+    # Cloudflare korumalı siteler
+    CLOUDFLARE_SITES = [
+        'hepsiburada.com', 'vatanbilgisayar.com', 'teknosa.com',
+        'mediamarkt.com.tr', 'ikea.com.tr', 'n11.com', 'ciceksepeti.com',
+        'trendyol.com'
+    ]
+
+    domain = urlparse(url).netloc.lower()
+    use_cloudscraper = CLOUDSCRAPER_AVAILABLE and any(site in domain for site in CLOUDFLARE_SITES)
 
     for attempt in range(max_retries):
         headers = USER_AGENTS[attempt % len(USER_AGENTS)].copy()
 
         try:
-            response = session.get(url, headers=headers, timeout=20, allow_redirects=True, proxies={})
+            if use_cloudscraper:
+                # Cloudscraper kullan
+                scraper = cloudscraper.create_scraper(
+                    browser={
+                        'browser': 'chrome',
+                        'platform': 'windows',
+                        'desktop': True
+                    },
+                    delay=3
+                )
+                response = scraper.get(url, headers=headers, timeout=30, allow_redirects=True)
+            else:
+                # Normal requests kullan
+                session = requests.Session()
+                session.trust_env = False
+                response = session.get(url, headers=headers, timeout=20, allow_redirects=True, proxies={})
 
-            # 403/503 hatası - farklı UA ile tekrar dene
-            if response.status_code in [403, 503] and attempt < max_retries - 1:
-                time.sleep(1)  # Kısa bekle
-                continue
+            # 403/503 hatası
+            if response.status_code in [403, 503]:
+                print(f"⚠️ HTTP {response.status_code} - Attempt {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 + attempt)  # Progressive delay
+                    continue
+                return None, f'HTTP hatası: {response.status_code} (Bot koruması)'
 
             response.raise_for_status()
 
@@ -1581,21 +1839,17 @@ def fetch_with_retry(url, max_retries=3):
 
             return response, None
 
-        except requests.exceptions.HTTPError as e:
-            if attempt < max_retries - 1:
-                time.sleep(1)
-                continue
-            return None, f'HTTP hatası: {e.response.status_code}'
-
         except requests.exceptions.Timeout:
+            print(f"⚠️ Timeout - Attempt {attempt + 1}/{max_retries}")
             if attempt < max_retries - 1:
-                time.sleep(1)
+                time.sleep(2)
                 continue
             return None, 'Site yanıt vermedi (timeout)'
 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
+            print(f"⚠️ Error: {type(e).__name__}: {str(e)[:100]}")
             if attempt < max_retries - 1:
-                time.sleep(1)
+                time.sleep(2)
                 continue
             return None, f'Bağlantı hatası: {str(e)}'
 
