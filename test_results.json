@@ -1,0 +1,308 @@
+{
+  "total_sites": 32,
+  "success": 0,
+  "partial": 0,
+  "fail": 32,
+  "category_stats": {
+    "🛒 MARKETPLACE": {
+      "total": 4,
+      "success": 0,
+      "partial": 0,
+      "fail": 4
+    },
+    "🏠 BEYAZ EŞYA": {
+      "total": 7,
+      "success": 0,
+      "partial": 0,
+      "fail": 7
+    },
+    "🪑 MOBİLYA (Shopify)": {
+      "total": 4,
+      "success": 0,
+      "partial": 0,
+      "fail": 4
+    },
+    "🛋️ MOBİLYA (Diğer)": {
+      "total": 4,
+      "success": 0,
+      "partial": 0,
+      "fail": 4
+    },
+    "🏡 EV TEKSTİLİ": {
+      "total": 5,
+      "success": 0,
+      "partial": 0,
+      "fail": 5
+    },
+    "🎨 DEKORASYON": {
+      "total": 3,
+      "success": 0,
+      "partial": 0,
+      "fail": 3
+    },
+    "🔨 DIY & YAPI MARKET": {
+      "total": 2,
+      "success": 0,
+      "partial": 0,
+      "fail": 2
+    },
+    "🔌 ELEKTRONİK": {
+      "total": 3,
+      "success": 0,
+      "partial": 0,
+      "fail": 3
+    }
+  },
+  "platform_stats": {
+    "Generic HTML": {
+      "success": 0,
+      "total": 22
+    },
+    "Generic HTML + WebP Optimizer": {
+      "success": 0,
+      "total": 2
+    },
+    "Shopify API": {
+      "success": 0,
+      "total": 3
+    },
+    "WooCommerce/Custom": {
+      "success": 0,
+      "total": 1
+    },
+    "WooCommerce": {
+      "success": 0,
+      "total": 2
+    },
+    "Next.js __NEXT_DATA__": {
+      "success": 0,
+      "total": 2
+    }
+  },
+  "detailed_results": [
+    {
+      "site": "Trendyol",
+      "platform": "Generic HTML",
+      "category": "🛒 MARKETPLACE",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.trendyol.com', port=443): Max retries exceeded with url: /casio/edifice-efr-526l-7avudf-kol-saati-p-3143273 (Caused by NameResolutionError(\"HTTPSConnection(host='www.trendyol.com', port=443): Failed to resolve 'www.trendyol.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Hepsiburada",
+      "platform": "Generic HTML",
+      "category": "🛒 MARKETPLACE",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.hepsiburada.com', port=443): Max retries exceeded with url: /tefal-comfort-max-inox-7-parca-tencere-seti-p-HBV00000IQRZ3 (Caused by NameResolutionError(\"HTTPSConnection(host='www.hepsiburada.com', port=443): Failed to resolve 'www.hepsiburada.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "N11",
+      "platform": "Generic HTML",
+      "category": "🛒 MARKETPLACE",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.n11.com', port=443): Max retries exceeded with url: /urun/philips-hd9200-90-airfryer-fritoz-2163428 (Caused by NameResolutionError(\"HTTPSConnection(host='www.n11.com', port=443): Failed to resolve 'www.n11.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Çiçeksepeti",
+      "platform": "Generic HTML",
+      "category": "🛒 MARKETPLACE",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.ciceksepeti.com', port=443): Max retries exceeded with url: /karaca-fine-pearl-cay-takimi-31-parca (Caused by NameResolutionError(\"HTTPSConnection(host='www.ciceksepeti.com', port=443): Failed to resolve 'www.ciceksepeti.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Arçelik",
+      "platform": "Generic HTML + WebP Optimizer",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.arcelik.com.tr', port=443): Max retries exceeded with url: /camasir-makinesi/9143-yn-a-9-kg-1400-devir-camasir-makinesi (Caused by NameResolutionError(\"HTTPSConnection(host='www.arcelik.com.tr', port=443): Failed to resolve 'www.arcelik.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Beko",
+      "platform": "Generic HTML + WebP Optimizer",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.beko.com.tr', port=443): Max retries exceeded with url: /urunler/buzdolaplari/rcna400e40zxb-tek-kapili-buzdolabi (Caused by NameResolutionError(\"HTTPSConnection(host='www.beko.com.tr', port=443): Failed to resolve 'www.beko.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Vestel",
+      "platform": "Generic HTML",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.vestel.com.tr', port=443): Max retries exceeded with url: /ev-aletleri/beyaz-esya/camasir-makinesi/9614-te (Caused by NameResolutionError(\"HTTPSConnection(host='www.vestel.com.tr', port=443): Failed to resolve 'www.vestel.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Bosch",
+      "platform": "Generic HTML",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.bosch-home.com.tr', port=443): Max retries exceeded with url: /urun-listesi/bula%C5%9F%C4%B1k-makineleri/ankastre-bula%C5%9F%C4%B1k-makineleri/60-cm-ankastre-bula%C5%9F%C4%B1k-makineleri/SMV4HTX31E (Caused by NameResolutionError(\"HTTPSConnection(host='www.bosch-home.com.tr', port=443): Failed to resolve 'www.bosch-home.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Siemens",
+      "platform": "Generic HTML",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.siemens-home.bsh-group.com', port=443): Max retries exceeded with url: /tr/urun-listesi/bulasik-makineleri/ankastre-bulasik-makineleri/60-cm-tam-ankastre-bulasik-makineleri/SN65ZX49CE (Caused by NameResolutionError(\"HTTPSConnection(host='www.siemens-home.bsh-group.com', port=443): Failed to resolve 'www.siemens-home.bsh-group.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Samsung",
+      "platform": "Generic HTML",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.samsung.com', port=443): Max retries exceeded with url: /tr/washing-machines/front-load/ww90t554dan-s3/ (Caused by NameResolutionError(\"HTTPSConnection(host='www.samsung.com', port=443): Failed to resolve 'www.samsung.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Altus",
+      "platform": "Generic HTML",
+      "category": "🏠 BEYAZ EŞYA",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.altus.com.tr', port=443): Max retries exceeded with url: /camasir-makinesi/al-9123-dx-9-kg-1200-devir-camasir-makinesi (Caused by NameResolutionError(\"HTTPSConnection(host='www.altus.com.tr', port=443): Failed to resolve 'www.altus.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Enza Home",
+      "platform": "Shopify API",
+      "category": "🪑 MOBİLYA (Shopify)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.enzahome.com.tr', port=443): Max retries exceeded with url: /aldea-koltuk-takimi-3-1-20260107/ (Caused by NameResolutionError(\"HTTPSConnection(host='www.enzahome.com.tr', port=443): Failed to resolve 'www.enzahome.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Normod",
+      "platform": "Shopify API",
+      "category": "🪑 MOBİLYA (Shopify)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='normod.com', port=443): Max retries exceeded with url: /products/klem-butter-blush-cagla-yesili-3-3-1-koltuk-takimi-kadife (Caused by NameResolutionError(\"HTTPSConnection(host='normod.com', port=443): Failed to resolve 'normod.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Vivense",
+      "platform": "Shopify API",
+      "category": "🪑 MOBİLYA (Shopify)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.vivense.com', port=443): Max retries exceeded with url: /monaco-koltuk-takimi-3-2-1 (Caused by NameResolutionError(\"HTTPSConnection(host='www.vivense.com', port=443): Failed to resolve 'www.vivense.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Alfemo",
+      "platform": "Generic HTML",
+      "category": "🪑 MOBİLYA (Shopify)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.alfemo.com.tr', port=443): Max retries exceeded with url: /koltuk-takimlari/vienza-koltuk-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.alfemo.com.tr', port=443): Failed to resolve 'www.alfemo.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "IKEA",
+      "platform": "WooCommerce/Custom",
+      "category": "🛋️ MOBİLYA (Diğer)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.ikea.com.tr', port=443): Max retries exceeded with url: /tr/urunler/oturma-odasi-mobilyalari/koltuk-takimlari/kivik-koltuk-takimi-hillared-koyu-mavi-art-s89277563 (Caused by NameResolutionError(\"HTTPSConnection(host='www.ikea.com.tr', port=443): Failed to resolve 'www.ikea.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Bellona",
+      "platform": "Generic HTML",
+      "category": "🛋️ MOBİLYA (Diğer)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.bellona.com.tr', port=443): Max retries exceeded with url: /koltuk-takimi/bello-koltuk-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.bellona.com.tr', port=443): Failed to resolve 'www.bellona.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "İstikbal",
+      "platform": "Generic HTML",
+      "category": "🛋️ MOBİLYA (Diğer)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.istikbal.com.tr', port=443): Max retries exceeded with url: /koltuk-takimlari/oturma-gruplari/stella-kose-koltuk (Caused by NameResolutionError(\"HTTPSConnection(host='www.istikbal.com.tr', port=443): Failed to resolve 'www.istikbal.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Doğtaş",
+      "platform": "Generic HTML",
+      "category": "🛋️ MOBİLYA (Diğer)",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.dogtas.com', port=443): Max retries exceeded with url: /koltuk-takimlari/modern-koltuk-takimlari/stella-koltuk-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.dogtas.com', port=443): Failed to resolve 'www.dogtas.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "English Home",
+      "platform": "WooCommerce",
+      "category": "🏡 EV TEKSTİLİ",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.englishhome.com', port=443): Max retries exceeded with url: /super-soft-cift-kisilik-pike-takimi-200x220-cm-beyaz (Caused by NameResolutionError(\"HTTPSConnection(host='www.englishhome.com', port=443): Failed to resolve 'www.englishhome.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Madame Coco",
+      "platform": "WooCommerce",
+      "category": "🏡 EV TEKSTİLİ",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.madamecoco.com.tr', port=443): Max retries exceeded with url: /florenza-pamuk-saten-cift-kisilik-nevresim-takimi-beyaz (Caused by NameResolutionError(\"HTTPSConnection(host='www.madamecoco.com.tr', port=443): Failed to resolve 'www.madamecoco.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Yataş",
+      "platform": "Generic HTML",
+      "category": "🏡 EV TEKSTİLİ",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.yatas.com.tr', port=443): Max retries exceeded with url: /selena-select-ranforce-cift-kisilik-nevresim-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.yatas.com.tr', port=443): Failed to resolve 'www.yatas.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Taç",
+      "platform": "Generic HTML",
+      "category": "🏡 EV TEKSTİLİ",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.tac.com.tr', port=443): Max retries exceeded with url: /pamuklu-cift-kisilik-nevresim-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.tac.com.tr', port=443): Failed to resolve 'www.tac.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Chakra",
+      "platform": "Generic HTML",
+      "category": "🏡 EV TEKSTİLİ",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.chakra.com.tr', port=443): Max retries exceeded with url: /urun/pamuk-saten-nevresim-takimi (Caused by NameResolutionError(\"HTTPSConnection(host='www.chakra.com.tr', port=443): Failed to resolve 'www.chakra.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Zara Home",
+      "platform": "Next.js __NEXT_DATA__",
+      "category": "🎨 DEKORASYON",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.zarahome.com', port=443): Max retries exceeded with url: /tr/cicek-desenli-saten-nevresim-l45131088 (Caused by NameResolutionError(\"HTTPSConnection(host='www.zarahome.com', port=443): Failed to resolve 'www.zarahome.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Karaca",
+      "platform": "Next.js __NEXT_DATA__",
+      "category": "🎨 DEKORASYON",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.karaca.com', port=443): Max retries exceeded with url: /urun/karaca-tea-break-cay-makinesi-inox-siyah (Caused by NameResolutionError(\"HTTPSConnection(host='www.karaca.com', port=443): Failed to resolve 'www.karaca.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "H&M Home",
+      "platform": "Generic HTML",
+      "category": "🎨 DEKORASYON",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www2.hm.com', port=443): Max retries exceeded with url: /tr_tr/productpage.1074402002.html (Caused by NameResolutionError(\"HTTPSConnection(host='www2.hm.com', port=443): Failed to resolve 'www2.hm.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Koçtaş",
+      "platform": "Generic HTML",
+      "category": "🔨 DIY & YAPI MARKET",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.koctas.com.tr', port=443): Max retries exceeded with url: /dewalt-dwe575k-1600w-190mm-sirkuler-testere/p/10022838 (Caused by NameResolutionError(\"HTTPSConnection(host='www.koctas.com.tr', port=443): Failed to resolve 'www.koctas.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Bauhaus",
+      "platform": "Generic HTML",
+      "category": "🔨 DIY & YAPI MARKET",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.bauhaus.com.tr', port=443): Max retries exceeded with url: /makita-hr2470-sds-plus-elektriki-testere (Caused by NameResolutionError(\"HTTPSConnection(host='www.bauhaus.com.tr', port=443): Failed to resolve 'www.bauhaus.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Vatan Bilgisayar",
+      "platform": "Generic HTML",
+      "category": "🔌 ELEKTRONİK",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.vatanbilgisayar.com', port=443): Max retries exceeded with url: /apple-iphone-15-pro-max-256-gb-mavi-titanium.html (Caused by NameResolutionError(\"HTTPSConnection(host='www.vatanbilgisayar.com', port=443): Failed to resolve 'www.vatanbilgisayar.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "Teknosa",
+      "platform": "Generic HTML",
+      "category": "🔌 ELEKTRONİK",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.teknosa.com', port=443): Max retries exceeded with url: /samsung-galaxy-s23-ultra-256-gb-p-125083744 (Caused by NameResolutionError(\"HTTPSConnection(host='www.teknosa.com', port=443): Failed to resolve 'www.teknosa.com' ([Errno -3] Temporary failure in name resolution)\"))"
+    },
+    {
+      "site": "MediaMarkt",
+      "platform": "Generic HTML",
+      "category": "🔌 ELEKTRONİK",
+      "status": "❌ BAŞARISIZ",
+      "error": "Bağlantı hatası: HTTPSConnectionPool(host='www.mediamarkt.com.tr', port=443): Max retries exceeded with url: /tr/product/_apple-iphone-15-128-gb-mavi-mphe3tu-a-1234567890.html (Caused by NameResolutionError(\"HTTPSConnection(host='www.mediamarkt.com.tr', port=443): Failed to resolve 'www.mediamarkt.com.tr' ([Errno -3] Temporary failure in name resolution)\"))"
+    }
+  ]
+}
