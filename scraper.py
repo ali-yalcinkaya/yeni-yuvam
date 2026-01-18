@@ -248,19 +248,42 @@ def parse_nextjs_product(soup, domain):
     Next.js kullanan siteler için özel parser
     __NEXT_DATA__ script'inden veri çıkarır
     """
+    import os
+    DEBUG = os.environ.get('SCRAPER_DEBUG', 'false').lower() == 'true'
+
     try:
         # __NEXT_DATA__ script'ini bul
         next_data_script = soup.find('script', id='__NEXT_DATA__')
         if not next_data_script or not next_data_script.string:
+            if DEBUG:
+                print("⚠️ __NEXT_DATA__ script tag bulunamadı!")
             return None
 
         data = json.loads(next_data_script.string)
+
+        if DEBUG:
+            print(f"✅ __NEXT_DATA__ bulundu! Keys: {list(data.keys())}")
 
         # Karaca için
         if 'karaca' in domain:
             try:
                 page_props = data.get('props', {}).get('pageProps', {})
+                if DEBUG:
+                    print(f"   pageProps keys: {list(page_props.keys())}")
+
                 product = page_props.get('product', {})
+                if DEBUG:
+                    if product:
+                        print(f"   product keys: {list(product.keys())}")
+                        print(f"   name: {product.get('name', 'N/A')}")
+                        print(f"   price: {product.get('price', 'N/A')}")
+                    else:
+                        print(f"   ⚠️ product key bulunamadı!")
+                        print(f"   Alternatif aramalar:")
+                        # Alternatif yolları dene
+                        for key in page_props.keys():
+                            if 'product' in key.lower():
+                                print(f"      Bulundu: {key} -> {type(page_props[key])}")
 
                 if product:
                     return {
@@ -270,7 +293,9 @@ def parse_nextjs_product(soup, domain):
                         'brand': product.get('brand', '') or 'Karaca',
                         'description': product.get('description', ''),
                     }
-            except:
+            except Exception as e:
+                if DEBUG:
+                    print(f"   ❌ Karaca parse hatası: {e}")
                 pass
 
         # Zara Home için
