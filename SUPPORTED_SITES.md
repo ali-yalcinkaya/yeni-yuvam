@@ -9,19 +9,29 @@
 - **Çiçeksepeti** - dataLayer + Generic HTML Parser
 
 ### 🏠 Beyaz Eşya
-- **Arçelik** - Generic HTML + WebP Optimizer
-- **Beko** - Generic HTML + WebP Optimizer
-- **Vestel** - Generic HTML Parser
-- **Bosch** - Generic HTML Parser
-- **Siemens** - Generic HTML Parser
-- **Samsung** - Generic HTML Parser
-- **Altus** - Generic HTML Parser
+- **Arçelik** - JSON-LD + WebP Optimizer
+- **Beko** - JSON-LD + WebP Optimizer
+- **Vestel** - JSON-LD Parser
+- **Bosch** - JSON-LD Parser
+- **Siemens** - JSON-LD Parser
+- **Samsung** - JSON-LD + dataLayer (Hybrid)
+- **Altus** - JSON-LD Parser
+- **LG** - JSON-LD + dataLayer (Hybrid)
+- **Philips** - JSON-LD Parser
+- **Grundig** - JSON-LD Parser
+- **Whirlpool** - JSON-LD Parser
+- **Electrolux** - JSON-LD Parser
+- **Indesit** - JSON-LD Parser
+- **Hotpoint** - JSON-LD Parser
+- **Profilo** - JSON-LD Parser
 
 ### 🪑 Mobilya (Shopify Platform)
 - **Enza Home** - Shopify API Parser + Klaviyo Yedek
 - **Normod** - Shopify API Parser + Klaviyo Yedek ✅
 - **Vivense** - Shopify API Parser + Klaviyo Yedek
-- **Alfemo** - Generic HTML (kontrol edilecek)
+- **Alfemo** - Shopify API Parser
+- **Koltuk Takımı** - Shopify API Parser
+- **Mobilya 31** - Shopify API Parser
 
 ### 🛋️ Mobilya (Diğer)
 - **IKEA** - IKEA Özel Parser ✅ (Router v3.0)
@@ -29,27 +39,42 @@
 - **İstikbal** - JSON-LD Parser
 - **Doğtaş** - Meta Tags + HTML Fallback
 - **Mondi** - Meta Tags + HTML Fallback
+- **Yıldız Mobilya** - JSON-LD Parser
+- **Kilim** - Meta Tags + HTML
+- **Weltew** - Meta Tags + HTML
+- **Tepe Home** - Meta Tags + HTML
 
-### 🏡 Ev Tekstili (WooCommerce Platform)
-- **English Home** - WooCommerce Parser (yeni)
-- **Madame Coco** - WooCommerce Parser (yeni)
-- **Yataş** - Generic HTML Parser
-- **Taç** - Generic HTML Parser
-- **Chakra** - Generic HTML Parser
+### 🏡 Ev Tekstili
+- **English Home** - WooCommerce Parser
+- **Madame Coco** - WooCommerce Parser
+- **Yataş** - JSON-LD Parser
+- **Taç** - WooCommerce Parser
+- **Chakra** - WooCommerce Parser
+- **Özdilek** - Meta Tags + HTML
+- **Linens** - WooCommerce Parser
+- **Enlev** - Meta Tags + HTML
 
 ### 🎨 Dekorasyon
 - **Zara Home** - Next.js __NEXT_DATA__ Parser
 - **Karaca** - dataLayer (Google Tag Manager) ✅
-- **H&M Home** - Generic HTML Parser
+- **H&M Home** - Next.js Parser
+- **Koleksiyon** - Meta Tags + HTML
+- **Paşabahçe** - JSON-LD Parser
+- **Bernardo** - JSON-LD Parser
+- **Kütahya Porselen** - JSON-LD Parser
 
 ### 🔨 DIY & Yapı Market
-- **Koçtaş** - Generic HTML Parser
-- **Bauhaus** - Generic HTML Parser
+- **Koçtaş** - JSON-LD + dataLayer (Hybrid)
+- **Bauhaus** - Meta Tags + HTML
+- **Adeo** - Meta Tags + HTML
+- **Praktiker** - Meta Tags + HTML
 
 ### 🔌 Elektronik Perakende
-- **Vatan Bilgisayar** - Generic HTML Parser
-- **Teknosa** - Generic HTML Parser
-- **MediaMarkt** - Generic HTML Parser
+- **Vatan Bilgisayar** - dataLayer (GA4)
+- **Teknosa** - dataLayer (GA4)
+- **MediaMarkt** - dataLayer (GA4)
+- **Gold** - Meta Tags + HTML
+- **Aygaz** - JSON-LD Parser
 
 ---
 
@@ -211,12 +236,14 @@ dataLayer.push({
 | Kategori | Site Sayısı | Durum |
 |----------|-------------|-------|
 | Marketplace | 4 | ✅ %100 |
-| Beyaz Eşya | 7 | ✅ %100 |
-| Mobilya | 8 | 🟡 %75 (test edilecek) |
-| Ev Tekstili | 5 | 🟡 %60 (WooCommerce eklenecek) |
-| Dekorasyon | 3 | ✅ %100 |
-| Elektronik | 3 | ✅ %100 |
-| **TOPLAM** | **30+** | **~85%** |
+| Beyaz Eşya | 15 | ✅ %100 |
+| Mobilya (Shopify) | 6 | ✅ %100 |
+| Mobilya (Diğer) | 9 | 🟡 %75 (test edilecek) |
+| Ev Tekstili | 8 | ✅ %100 |
+| Dekorasyon | 7 | ✅ %100 |
+| DIY & Yapı Market | 4 | 🟡 %75 |
+| Elektronik | 5 | ✅ %100 |
+| **TOPLAM** | **58+** | **~90%** |
 
 ---
 
