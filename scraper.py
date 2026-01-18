@@ -387,10 +387,23 @@ def extract_image(soup, url, domain):
     # 4. HTML elementlerinden (data-src, srcset, src)
     if not image_url:
         img_selectors = [
+            # Generic
             '.product-image img', '.gallery-image img', '[itemprop="image"]',
             '.product-gallery img', '.pdp-gallery img', '.main-image img',
             '.product-detail-image img', 'img.product-image', '.slick-slide img',
-            '.carousel-item img', '.product-img img', '[data-testid*="image"] img'
+            '.carousel-item img', '.product-img img', '[data-testid*="image"] img',
+            # Magento 2
+            '.gallery-placeholder img', '.fotorama__img', '.product-image-photo',
+            # PrestaShop
+            '#bigpic', '.product-cover img', '.js-qv-product-cover img',
+            # OpenCart
+            '.product-image img', '#image', '.thumbnails img',
+            # WooCommerce
+            '.woocommerce-product-gallery__image img', '.wp-post-image',
+            # Shopware
+            '.gallery-slider-item img', '.image-slider img',
+            # Fallback
+            'img[alt*="product"]', 'img[alt*="ürün"]', '.product img'
         ]
 
         for selector in img_selectors:
@@ -554,18 +567,26 @@ def extract_html_elements(soup, url, html_text):
     # ============ TITLE (GENİŞLETİLMİŞ) ============
     if not result['title']:
         title_selectors = [
-            # Generic
+            # Generic E-commerce
             'h1.product-name', 'h1.product-title', 'h1#productName',
             'h1[itemprop="name"]', '.product-name h1', '.pr-new-br h1',
             'h1.product_name', '.product-title h1', 'h1.pdp-title',
             'h1.product-detail-name', '[data-testid="product-name"]',
+            '.product__title', '.prod-name', '.item-title',
             # WooCommerce
-            '.product_title', 'h1.entry-title',
-            # Magento
-            '.page-title', '.product-name',
-            # Custom
+            '.product_title', 'h1.entry-title', '.summary h1',
+            # Magento 2
+            '.page-title-wrapper h1', '.product-info-main .page-title',
+            '.product.attribute.overview', '.page-title', '.product-name',
+            # PrestaShop
+            'h1[itemprop="name"]', '.product-title', '#product-name',
+            '.h1', '.product-name',
+            # OpenCart
+            '.product-title h1', '#content h1', '.product-info h1',
+            # Shopware
+            '.product-detail-name', '.product-name',
+            # Custom & Fallback
             '.product-info h1', '.product-header h1', '.prod-title',
-            # Fallback
             'h1'
         ]
 
@@ -578,12 +599,30 @@ def extract_html_elements(soup, url, html_text):
     # ============ PRICE (GENİŞLETİLMİŞ) ============
     if not result['price']:
         price_selectors = [
+            # Generic E-commerce
             '.product-price', '.prc-dsc', '.price', '[data-test-id="price"]',
             '[data-testid="price"]', '[data-testid="product-price"]',
             '.product_price', '[itemprop="price"]', '.current-price',
             '.sale-price', '.pdp-price', '.price-value', '.product-detail-price',
             '.new-price', '.discount-price', '.sales-price', '.selling-price',
-            '.price-current', '.price-box .price', '.product-price-value',
+            '.price-current', '.product-price-value',
+            # Magento 2
+            '.price-box .price', '.special-price .price', '.final-price .price',
+            '.price-wrapper .price', '.product-info-price .price',
+            # PrestaShop
+            '.product-price', '.current-price', 'span[itemprop="price"]',
+            '.product-prices .price', '#our_price_display',
+            # OpenCart
+            '.product-price', '#price-special', '.price-new',
+            '.price-tag', 'h2.price',
+            # WooCommerce
+            '.woocommerce-Price-amount', '.price ins .amount',
+            'p.price', '.summary .price',
+            # Shopware
+            '.product-detail-price', '.price--default',
+            # Trendyol/Hepsiburada specific
+            '.prc-dsc', '.prc-slg', '.price-value',
+            # Fallback
             '[class*="price"]', '[id*="price"]'
         ]
 
@@ -605,9 +644,22 @@ def extract_html_elements(soup, url, html_text):
     # ============ BRAND ============
     if not result['brand']:
         brand_selectors = [
+            # Generic
             '[itemprop="brand"]', '.brand', '.product-brand',
             '.pr-new-br a', '.product_brand', '.brand-name',
-            'a.product-brand', '.manufacturer', '[data-testid="brand"]'
+            'a.product-brand', '.manufacturer', '[data-testid="brand"]',
+            # Magento
+            '.product-brand', '.brand-logo', '.product-manufacturer',
+            # PrestaShop
+            '#product_manufacturer', '.manufacturer-name',
+            # OpenCart
+            '.manufacturer', 'a[href*="manufacturer"]',
+            # WooCommerce
+            '.posted_in a', '.product-brands',
+            # Trendyol/Hepsiburada
+            '.product-brand a', '[data-test-id="brand"]',
+            # Fallback
+            '[class*="brand"]', '[class*="manufacturer"]'
         ]
 
         for selector in brand_selectors:
