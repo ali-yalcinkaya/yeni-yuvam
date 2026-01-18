@@ -1174,35 +1174,56 @@ def delete_urun(id):
 @app.route('/api/scrape', methods=['POST'])
 def scrape_url():
     """URL'den ürün bilgisi çek - Akıllı Scraper"""
-    from scraper import scrape_product
-    
+    try:
+        from scraper import scrape_product
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Scraper modülü yüklenemedi: {str(e)}'
+        }), 500
+
     data = request.get_json()
     url = data.get('url', '')
-    
+
     if not url:
         return jsonify({'success': False, 'error': 'URL gerekli'}), 400
-    
-    result = scrape_product(url)
-    
-    if result['success']:
-        # Veriyi frontend formatına dönüştür
-        scraped = result['data']
+
+    try:
+        result = scrape_product(url)
+
+        if result['success']:
+            # Veriyi frontend formatına dönüştür
+            scraped = result['data']
+            return jsonify({
+                'success': True,
+                'data': {
+                    'urun_adi': scraped.get('title', ''),
+                    'marka': scraped.get('brand', ''),
+                    'fiyat': scraped.get('price', 0),
+                    'resim_url': scraped.get('image_url', ''),
+                    'link': scraped.get('link', url),
+                    'kategori_tahmini': scraped.get('kategori_tahmini', ''),
+                    'alt_kategori_tahmini': scraped.get('alt_kategori_tahmini', ''),
+                    'oda_tahmini': scraped.get('oda_tahmini', ''),
+                    'teknik_ozellikler': scraped.get('specs', {})
+                }
+            })
+        else:
+            # Scraper hatası - detaylı mesaj döndür
+            error_msg = result.get('error', 'Bilinmeyen hata')
+            return jsonify({
+                'success': False,
+                'error': f'Scraping hatası: {error_msg}',
+                'url': url
+            })
+    except Exception as e:
+        # Beklenmeyen hata
+        import traceback
         return jsonify({
-            'success': True,
-            'data': {
-                'urun_adi': scraped.get('title', ''),
-                'marka': scraped.get('brand', ''),
-                'fiyat': scraped.get('price', 0),
-                'resim_url': scraped.get('image_url', ''),
-                'link': scraped.get('link', url),
-                'kategori_tahmini': scraped.get('kategori_tahmini', ''),
-                'alt_kategori_tahmini': scraped.get('alt_kategori_tahmini', ''),
-                'oda_tahmini': scraped.get('oda_tahmini', ''),
-                'teknik_ozellikler': scraped.get('specs', {})
-            }
-        })
-    else:
-        return jsonify(result)
+            'success': False,
+            'error': f'Sunucu hatası: {str(e)}',
+            'traceback': traceback.format_exc()
+        }), 500
 
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard():
