@@ -113,6 +113,117 @@ REGEX_PATTERNS = {
 }
 
 # ============================================
+# SHOPIFY PARSER (Enza Home, Normod vb.)
+# ============================================
+def parse_shopify_product(url, session):
+    """
+    Shopify kullanan siteler için özel parser
+    /products/{handle}.json endpoint'ini kullanır
+    """
+    try:
+        # URL'den handle'ı çıkar
+        # Örnek: https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/
+        # Handle: aldea-koltuk-takimi-3-1-20260107
+        parsed = urlparse(url)
+        path = parsed.path.strip('/')
+
+        # /products/ varsa kaldır
+        if path.startswith('products/'):
+            handle = path.replace('products/', '')
+        else:
+            # Path'in kendisi handle
+            handle = path.split('/')[0] if '/' in path else path
+
+        # Shopify JSON endpoint
+        json_url = f"{parsed.scheme}://{parsed.netloc}/products/{handle}.json"
+
+        headers = USER_AGENTS[0].copy()
+        response = session.get(json_url, headers=headers, timeout=15, proxies={})
+
+        if response.status_code == 200:
+            data = response.json()
+            product = data.get('product', {})
+
+            if product:
+                # İlk variant'ı al
+                variants = product.get('variants', [])
+                first_variant = variants[0] if variants else {}
+
+                # Görseller
+                images = product.get('images', [])
+                image_url = images[0].get('src', '') if images else ''
+
+                return {
+                    'title': product.get('title', ''),
+                    'price': float(first_variant.get('price', 0)),
+                    'image_url': image_url,
+                    'brand': product.get('vendor', ''),
+                    'description': product.get('body_html', ''),
+                }
+
+        return None
+    except:
+        return None
+
+# ============================================
+# NEXT.JS PARSER (Karaca, Zara Home vb.)
+# ============================================
+def parse_nextjs_product(soup, domain):
+    """
+    Next.js kullanan siteler için özel parser
+    __NEXT_DATA__ script'inden veri çıkarır
+    """
+    try:
+        # __NEXT_DATA__ script'ini bul
+        next_data_script = soup.find('script', id='__NEXT_DATA__')
+        if not next_data_script or not next_data_script.string:
+            return None
+
+        data = json.loads(next_data_script.string)
+
+        # Karaca için
+        if 'karaca' in domain:
+            try:
+                page_props = data.get('props', {}).get('pageProps', {})
+                product = page_props.get('product', {})
+
+                if product:
+                    return {
+                        'title': product.get('name', '') or product.get('title', ''),
+                        'price': float(product.get('price', 0) or product.get('salePrice', 0)),
+                        'image_url': product.get('image', '') or product.get('mainImage', ''),
+                        'brand': product.get('brand', '') or 'Karaca',
+                        'description': product.get('description', ''),
+                    }
+            except:
+                pass
+
+        # Zara Home için
+        if 'zarahome' in domain or 'zara' in domain:
+            try:
+                page_props = data.get('props', {}).get('pageProps', {})
+                product = page_props.get('product', {}) or page_props.get('productData', {})
+
+                if product:
+                    # Zara'nın veri yapısı
+                    detail = product.get('detail', {})
+                    colors = detail.get('colors', [{}])[0] if detail.get('colors') else {}
+
+                    return {
+                        'title': detail.get('displayName', '') or product.get('name', ''),
+                        'price': float(colors.get('price', 0) / 100) if colors.get('price') else 0,  # Cent to TL
+                        'image_url': colors.get('image', {}).get('url', '') if colors.get('image') else '',
+                        'brand': 'Zara Home',
+                        'description': detail.get('description', ''),
+                    }
+            except:
+                pass
+
+        return None
+    except:
+        return None
+
+# ============================================
 # 1. MOBİL LİNK NORMALİZASYONU
 # ============================================
 def normalize_mobile_url(url):
@@ -821,19 +932,34 @@ def scrape_product(url):
         soup = BeautifulSoup(response.content, 'html.parser')
         html_text = response.text
         domain = urlparse(normalized_url).netloc.lower()
+        session = requests.Session()
+        session.trust_env = False
+
+        # ============ SİTE-ÖZEL PARSER'LAR ============
+        # Shopify (Enza Home, Normod)
+        shopify_data = None
+        if any(site in domain for site in ['enzahome', 'normod']):
+            shopify_data = parse_shopify_product(normalized_url, session)
+
+        # Next.js (Karaca, Zara Home)
+        nextjs_data = None
+        if any(site in domain for site in ['karaca', 'zarahome', 'zara']):
+            nextjs_data = parse_nextjs_product(soup, domain)
 
         # ============ VERİ ÇIKARMA ============
         json_ld_data = extract_json_ld(soup)
         meta_data = extract_meta_tags(soup)
         html_data = extract_html_elements(soup, normalized_url, html_text)
 
-        # Birleştir (Öncelik: JSON-LD > Meta > HTML)
+        # Birleştir (Öncelik: Site-Özel > JSON-LD > Meta > HTML)
+        special_data = shopify_data or nextjs_data or {}
+
         result = {
-            'title': json_ld_data['title'] or meta_data['title'] or html_data['title'],
-            'price': json_ld_data['price'] or meta_data['price'] or html_data['price'],
-            'image_url': json_ld_data['image_url'] or meta_data['image_url'] or html_data['image_url'],
-            'brand': json_ld_data['brand'] or meta_data['brand'] or html_data['brand'],
-            'description': json_ld_data['description'] or meta_data['description'],
+            'title': special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title'],
+            'price': special_data.get('price', 0) or json_ld_data['price'] or meta_data['price'] or html_data['price'],
+            'image_url': special_data.get('image_url', '') or json_ld_data['image_url'] or meta_data['image_url'] or html_data['image_url'],
+            'brand': special_data.get('brand', '') or json_ld_data['brand'] or meta_data['brand'] or html_data['brand'],
+            'description': special_data.get('description', '') or json_ld_data['description'] or meta_data['description'],
             'link': normalized_url,
             'sku': json_ld_data['sku'],
             'gtin': json_ld_data['gtin'],
