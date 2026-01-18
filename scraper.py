@@ -457,6 +457,13 @@ def scrape_ikea(url, soup, use_cloudscraper=True):
                         except:
                             continue
 
+        # Hiçbir yöntem çalışmadıysa meta_html_fallback dene
+        if not (result['title'] and result['price'] > 0):
+            logger.info("🔄 IKEA: meta_html_fallback deneniyor...")
+            fallback_result = scrape_meta_html_fallback(soup, url)
+            if fallback_result:
+                return fallback_result
+
         return result if (result['title'] and result['price'] > 0) else None
 
     except Exception as e:
@@ -528,6 +535,13 @@ def scrape_datalayer_hepsiburada(url, soup, html_text, use_cloudscraper=True):
             og_image = soup.find('meta', property='og:image')
             if og_image:
                 result['image_url'] = og_image.get('content', '')
+
+        # Hepsiburada dataLayer başarısız olursa meta_html_fallback dene
+        if not (result['title'] and result['price'] > 0):
+            logger.info("🔄 Hepsiburada dataLayer başarısız, meta_html_fallback deneniyor...")
+            fallback_result = scrape_meta_html_fallback(soup, url)
+            if fallback_result:
+                return fallback_result
 
         return result if result['title'] and result['price'] > 0 else None
 
@@ -819,9 +833,22 @@ def parse_woocommerce_product(url, soup, use_cloudscraper=False):
                     'description': '',
                 }
 
+        # WooCommerce başarısız olursa meta_html_fallback dene
+        logger.info("🔄 WooCommerce başarısız, meta_html_fallback deneniyor...")
+        fallback_result = scrape_meta_html_fallback(soup, url)
+        if fallback_result:
+            return fallback_result
+
         return None
     except Exception as e:
         logger.error(f"⚠️ WooCommerce parser hatası: {e}")
+        # Exception durumunda da meta_html_fallback dene
+        try:
+            fallback_result = scrape_meta_html_fallback(soup, url)
+            if fallback_result:
+                return fallback_result
+        except:
+            pass
         return None
 
 # ============================================
@@ -907,17 +934,13 @@ def parse_shopify_product(url, use_cloudscraper=False):
                 logger.warning(f"Shopify JSON parse hatası: {e}")
 
         # Yöntem 2: HTML'den Klaviyo/dataLayer çek
-        print(f"🔄 Shopify JSON başarısız, HTML deneniyor...")
+        logger.info(f"🔄 Shopify JSON başarısız, HTML deneniyor...")
 
         try:
             html_url = url
-            if CLOUDSCRAPER_AVAILABLE:
-                scraper = cloudscraper.create_scraper()
-                response = scraper.get(html_url, headers=USER_AGENTS[0], timeout=15)
-            else:
-                response = session.get(html_url, headers=USER_AGENTS[0], timeout=15, proxies={})
+            response, error = fetch_with_retry(html_url, timeout=20, use_cloudscraper=use_cloudscraper)
 
-            if response.status_code == 200:
+            if response and response.status_code == 200:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 html_text = response.text
 
@@ -976,18 +999,29 @@ def parse_shopify_product(url, use_cloudscraper=False):
                         result['image_url'] = og_image.get('content', '')
 
                 if result['title'] or result['price'] > 0:
-                    print(f"✅ Shopify HTML başarılı: {result['title'][:50] if result['title'] else 'N/A'}")
+                    logger.info(f"✅ Shopify HTML başarılı: {result['title'][:50] if result['title'] else 'N/A'}")
                     return result
 
         except Exception as e:
-            import requests
-            session = requests.Session()
-            print(f"⚠️ Shopify HTML hatası: {e}")
+            logger.error(f"⚠️ Shopify HTML hatası: {e}")
+
+        # Yöntem 3: Meta HTML fallback (son şans)
+        logger.info(f"🔄 Shopify HTML başarısız, meta_html_fallback deneniyor...")
+        try:
+            fallback_response, error = fetch_with_retry(url, timeout=20, use_cloudscraper=use_cloudscraper)
+            if fallback_response and fallback_response.status_code == 200:
+                fallback_soup = BeautifulSoup(fallback_response.content, 'html.parser')
+                fallback_result = scrape_meta_html_fallback(fallback_soup, url)
+                if fallback_result:
+                    logger.info(f"✅ Shopify meta_html_fallback başarılı")
+                    return fallback_result
+        except Exception as e:
+            logger.error(f"⚠️ Shopify meta_html_fallback hatası: {e}")
 
         return None
 
     except Exception as e:
-        print(f"⚠️ Shopify parser hatası: {e}")
+        logger.error(f"⚠️ Shopify parser hatası: {e}")
         return None
 
 # ============================================
@@ -1074,9 +1108,22 @@ def parse_nextjs_product(url, soup, use_cloudscraper=False):
             except:
                 pass
 
+        # Hiçbir Next.js yöntemi çalışmadıysa meta_html_fallback dene
+        logger.info("🔄 Next.js başarısız, meta_html_fallback deneniyor...")
+        fallback_result = scrape_meta_html_fallback(soup, url)
+        if fallback_result:
+            return fallback_result
+
         return None
     except Exception as e:
         logger.error(f"⚠️ Next.js parser hatası: {e}")
+        # Exception durumunda da meta_html_fallback dene
+        try:
+            fallback_result = scrape_meta_html_fallback(soup, url)
+            if fallback_result:
+                return fallback_result
+        except:
+            pass
         return None
 
 # ============================================
@@ -2072,7 +2119,6 @@ def scrape_product(url):
         except Exception as e:
             parser_error = f"{handler} parser error: {str(e)}"
             logger.error(parser_error)
-            print(f"⚠️ {parser_error}")
 
         # Debug: Router sonuçları
         import os
