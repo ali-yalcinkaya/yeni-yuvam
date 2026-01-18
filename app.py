@@ -279,7 +279,7 @@ def init_db():
         cursor.execute("SELECT fiyat_guncelleme_tarihi FROM urunler LIMIT 1")
     except sqlite3.OperationalError:
         print("→ Migration: fiyat_guncelleme_tarihi sütunu ekleniyor...")
-        cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE urunler ADD COLUMN fiyat_guncelleme_tarihi TIMESTAMP DEFAULT NULL")
 
     try:
         cursor.execute("SELECT resim_base64 FROM urunler LIMIT 1")
@@ -301,6 +301,10 @@ def image_url_to_base64(url, max_size=(800, 800)):
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         if response.status_code != 200:
             return None
+
+        # Content-Type'ı kontrol et ve gerekirse encoding'i düzelt
+        if 'text' in response.headers.get('Content-Type', ''):
+            response.encoding = response.apparent_encoding
 
         # PIL ile resmi aç ve boyutlandır
         img = Image.open(BytesIO(response.content))
@@ -1365,6 +1369,7 @@ def export_excel():
 
     # Excel dosyası oluştur
     output = BytesIO()
+    # type: ignore
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Tüm Ürünler', index=False)
 
@@ -1474,6 +1479,7 @@ def export_excel_alinanlar():
 
     # Excel dosyası oluştur
     output = BytesIO()
+    # type: ignore
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         # Alınan ürünler sheet
         df.to_excel(writer, sheet_name='Alınan Ürünler', index=False)
