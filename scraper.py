@@ -106,10 +106,10 @@ REGEX_PATTERNS = {
 
     # Malzeme/Kumaş
     'malzeme': r'(?:malzeme|materyal|material|kumaş|fabric)[:\s]*([A-Za-zğüşıöçĞÜŞİÖÇ\s,]+)',
-    'kumas_tipi': r'\b(pamuk|saten|ranforce|penye|floş|pike|şardonlu|jakarlı)\b',
+    'kumas_tipi': r'\b(pamuk|saten|ranforce|penye|floş|pike|şardonlu|jakarlı|kadife|keten|ipek|süet|deri|mikrofiber)\b',
 
-    # Mobilya tipleri
-    'mobilya_tipi': r"(\d+['']lü|köşe\s*takımı|berjer|chester|kanepe|zigon)",
+    # Mobilya tipleri (3+3+1, 2+3 formatları dahil)
+    'mobilya_tipi': r"(\d+['']lü|\d+\+\d+\+\d+|\d+-\d+-\d+|\d+\+\d+|\d+-\d+|köşe\s*takımı|berjer|chester|kanepe|zigon)",
 }
 
 # ============================================
@@ -502,7 +502,7 @@ def detect_category_and_room(url, title, specs):
         return 'Mutfak Gereci', 'Düzenleyici', 'Mutfak'
     if any(x in combined for x in ['kavanoz', 'saklama kabı', 'saklama kabi', 'storage jar']):
         return 'Mutfak Gereci', 'Düzenleyici', 'Mutfak'
-    if any(x in combined for x in ['blender', 'mikser', 'kahve makinesi', 'coffee maker']):
+    if any(x in combined for x in ['blender', 'mikser', 'kahve makinesi', 'çay makinesi', 'cay makinesi', 'coffee maker', 'tea maker']):
         return 'Mutfak Gereci', 'Genel', 'Mutfak'
 
     # ============ OFİS/KIRTASIYE (YENİ) ============
