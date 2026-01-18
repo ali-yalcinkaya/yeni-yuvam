@@ -113,6 +113,81 @@ REGEX_PATTERNS = {
 }
 
 # ============================================
+# WOOCOMMERCE PARSER (English Home, Madame Coco, IKEA vb.)
+# ============================================
+def parse_woocommerce_product(url, session, soup):
+    """
+    WooCommerce kullanan siteler için özel parser
+    1. HTML'den data-product-id çek
+    2. Veya HTML içinden schema/meta parse et
+    """
+    try:
+        # WooCommerce genelde HTML'de zengin veri saklar
+        # Product ID'yi bul
+        product_div = soup.find('div', class_='product') or soup.find('div', attrs={'data-product-id': True})
+
+        if product_div:
+            # Title
+            title = ''
+            title_el = soup.select_one('.product_title, h1.product-title, .product-name')
+            if title_el:
+                title = title_el.get_text(strip=True)
+
+            # Price
+            price = 0
+            price_selectors = [
+                '.woocommerce-Price-amount', '.price ins .amount', '.price .amount',
+                '.product-price .amount', 'span[itemprop="price"]', '.product_price .amount'
+            ]
+            for selector in price_selectors:
+                price_el = soup.select_one(selector)
+                if price_el:
+                    price_text = price_el.get_text(strip=True)
+                    price_clean = re.sub(r'[^\d,.]', '', price_text)
+                    price_clean = price_clean.replace('.', '').replace(',', '.')
+                    try:
+                        price = float(price_clean)
+                        if price > 0:
+                            break
+                    except:
+                        continue
+
+            # Image
+            image_url = ''
+            img_selectors = [
+                '.woocommerce-product-gallery__image img',
+                '.product-image img',
+                'img.wp-post-image',
+                '.product-gallery img'
+            ]
+            for selector in img_selectors:
+                img = soup.select_one(selector)
+                if img:
+                    src = img.get('data-src') or img.get('data-large-image') or img.get('src')
+                    if src and 'placeholder' not in src.lower():
+                        image_url = src
+                        break
+
+            # Brand
+            brand = ''
+            brand_el = soup.select_one('.product-brand, .brand, [itemprop="brand"]')
+            if brand_el:
+                brand = brand_el.get_text(strip=True) or brand_el.get('content', '')
+
+            if title or price > 0:
+                return {
+                    'title': title,
+                    'price': price,
+                    'image_url': image_url,
+                    'brand': brand,
+                    'description': '',
+                }
+
+        return None
+    except:
+        return None
+
+# ============================================
 # SHOPIFY PARSER (Enza Home, Normod vb.)
 # ============================================
 def parse_shopify_product(url, session):
@@ -476,13 +551,22 @@ def extract_html_elements(soup, url, html_text):
     result['price'] = hidden_data.get('price', 0)
     result['brand'] = hidden_data.get('brand', '')
 
-    # ============ TITLE ============
+    # ============ TITLE (GENİŞLETİLMİŞ) ============
     if not result['title']:
         title_selectors = [
+            # Generic
             'h1.product-name', 'h1.product-title', 'h1#productName',
             'h1[itemprop="name"]', '.product-name h1', '.pr-new-br h1',
             'h1.product_name', '.product-title h1', 'h1.pdp-title',
-            'h1.product-detail-name', '[data-testid="product-name"]', 'h1'
+            'h1.product-detail-name', '[data-testid="product-name"]',
+            # WooCommerce
+            '.product_title', 'h1.entry-title',
+            # Magento
+            '.page-title', '.product-name',
+            # Custom
+            '.product-info h1', '.product-header h1', '.prod-title',
+            # Fallback
+            'h1'
         ]
 
         for selector in title_selectors:
@@ -936,15 +1020,20 @@ def scrape_product(url):
         session.trust_env = False
 
         # ============ SİTE-ÖZEL PARSER'LAR ============
-        # Shopify (Enza Home, Normod)
+        # Shopify (Enza Home, Normod, Vivense, Alfemo)
         shopify_data = None
-        if any(site in domain for site in ['enzahome', 'normod']):
+        if any(site in domain for site in ['enzahome', 'normod', 'vivense', 'alfemo']):
             shopify_data = parse_shopify_product(normalized_url, session)
 
-        # Next.js (Karaca, Zara Home)
+        # Next.js (Karaca, Zara Home, H&M Home)
         nextjs_data = None
-        if any(site in domain for site in ['karaca', 'zarahome', 'zara']):
+        if any(site in domain for site in ['karaca', 'zarahome', 'zara', 'hm.com']):
             nextjs_data = parse_nextjs_product(soup, domain)
+
+        # WooCommerce (English Home, Madame Coco, IKEA, Yataş, Taç, Chakra)
+        woocommerce_data = None
+        if any(site in domain for site in ['englishhome', 'madamecoco', 'ikea.com.tr', 'yatas', 'tac.com.tr', 'chakra']):
+            woocommerce_data = parse_woocommerce_product(normalized_url, session, soup)
 
         # ============ VERİ ÇIKARMA ============
         json_ld_data = extract_json_ld(soup)
@@ -952,7 +1041,7 @@ def scrape_product(url):
         html_data = extract_html_elements(soup, normalized_url, html_text)
 
         # Birleştir (Öncelik: Site-Özel > JSON-LD > Meta > HTML)
-        special_data = shopify_data or nextjs_data or {}
+        special_data = shopify_data or nextjs_data or woocommerce_data or {}
 
         result = {
             'title': special_data.get('title', '') or json_ld_data['title'] or meta_data['title'] or html_data['title'],
