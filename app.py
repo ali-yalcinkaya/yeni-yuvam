@@ -302,6 +302,10 @@ def image_url_to_base64(url, max_size=(800, 800)):
         if response.status_code != 200:
             return None
 
+        # Content-Type'ı kontrol et ve gerekirse encoding'i düzelt
+        if 'text' in response.headers.get('Content-Type', ''):
+            response.encoding = response.apparent_encoding
+
         # PIL ile resmi aç ve boyutlandır
         img = Image.open(BytesIO(response.content))
 
