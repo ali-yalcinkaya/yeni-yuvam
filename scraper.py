@@ -145,7 +145,7 @@ REGEX_PATTERNS = {
 SITE_HANDLERS = {
     # Marketplace - API Öncelikli
     'trendyol.com': 'api_trendyol',
-    'hepsiburada.com': 'datalayer',  # API yerine dataLayer daha güvenilir
+    'hepsiburada.com': 'jsonld',  # JSON-LD schema kullan
     'n11.com': 'datalayer',
     'ciceksepeti.com': 'datalayer',
 
@@ -166,11 +166,17 @@ SITE_HANDLERS = {
     'hotpoint.com.tr': 'jsonld',
     'profilo.com': 'jsonld',
 
+    # Mobilya - Akinon Platform
+    'enzahome.com.tr': 'akinon',
+    'alfemo.com.tr': 'akinon',
+    'istikbal.com.tr': 'akinon',
+    'bellona.com.tr': 'akinon',
+    'dogtas.com': 'akinon',
+    'mondi.com.tr': 'akinon',
+
     # Mobilya - Shopify
-    'enzahome.com.tr': 'shopify',
     'normod.com': 'shopify',
     'vivense.com': 'shopify',
-    'alfemo.com.tr': 'shopify',
     'koltuktakimi.com': 'shopify',
     'mobilya31.com': 'shopify',
 
@@ -471,82 +477,171 @@ def scrape_ikea(url, soup, use_cloudscraper=True):
         return None
 
 # ============================================
-# HEPSİBURADA DATALAYER PARSER
+# HEPSİBURADA JSON-LD PARSER
 # ============================================
-def scrape_datalayer_hepsiburada(url, soup, html_text, use_cloudscraper=True):
-    """Hepsiburada dataLayer parser - GA4 + GA Universal hybrid"""
+def scrape_hepsiburada(url, use_cloudscraper=True):
+    """Scrape Hepsiburada using JSON-LD schema"""
     try:
-        logger.info(f"Trying Hepsiburada dataLayer parser for {url}")
-        result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
+        logger.info(f"Trying Hepsiburada JSON-LD parser for {url}")
+        response, error = fetch_with_retry(url, timeout=20, use_cloudscraper=use_cloudscraper)
 
-        # dataLayer.push içinden ecommerce verisi çek
-        dataLayer_pattern = r'dataLayer\.push\(\s*({[\s\S]*?"ecommerce"[\s\S]*?})\s*\);'
-        matches = re.finditer(dataLayer_pattern, html_text)
+        if not response or response.status_code != 200:
+            logger.error(f"Failed to fetch Hepsiburada: {url} (status: {response.status_code if response else 'None'})")
+            return None
 
-        for match in matches:
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # JSON-LD script tag'lerini bul
+        for script in soup.find_all('script', type='application/ld+json'):
             try:
-                json_str = match.group(1)
-                data = json.loads(json_str)
+                data = json.loads(script.string)
 
-                if 'ecommerce' in data:
-                    ecommerce = data['ecommerce']
+                # @graph içinde Product ara
+                if isinstance(data, dict) and '@graph' in data:
+                    for item in data['@graph']:
+                        if item.get('@type') == 'Product':
+                            offers = item.get('offers', {})
+                            image_data = item.get('image', [])
+                            images = image_data if isinstance(image_data, list) else [image_data] if image_data else []
 
-                    # GA4 format: items[]
-                    if 'items' in ecommerce and len(ecommerce['items']) > 0:
-                        item = ecommerce['items'][0]
-                        if not result['title']:
-                            result['title'] = item.get('item_name', '') or item.get('name', '')
-                        if not result['price']:
-                            price_val = item.get('price', 0) or item.get('item_price', 0)
-                            result['price'] = float(price_val) if price_val else 0
-                        if not result['brand']:
-                            result['brand'] = item.get('item_brand', '') or item.get('brand', '')
-                        if not result['image_url']:
-                            img = item.get('item_image', '') or item.get('image_url', '')
-                            if img and img.startswith('http'):
-                                result['image_url'] = img
+                            brand_data = item.get('brand', {})
+                            brand = brand_data.get('name') if isinstance(brand_data, dict) else str(brand_data)
 
-                    # GA Universal format: detail.products[]
-                    if 'detail' in ecommerce and 'products' in ecommerce['detail']:
-                        products = ecommerce['detail']['products']
-                        if products and len(products) > 0:
-                            product = products[0]
-                            if not result['title']:
-                                result['title'] = product.get('name', '')
-                            if not result['price']:
-                                result['price'] = float(product.get('price', 0))
-                            if not result['brand']:
-                                result['brand'] = product.get('brand', '')
+                            rating_data = item.get('aggregateRating', {})
 
-                    # Eğer veri bulunduysa döndür
-                    if result['title'] or result['price']:
-                        return result
+                            logger.info(f"✅ Hepsiburada JSON-LD başarılı: {item.get('name', '')[:50]}")
+                            return {
+                                'title': item.get('name'),
+                                'price': float(offers.get('price', 0)),
+                                'brand': brand or '',
+                                'image_url': images[0] if images else '',
+                                'description': item.get('description', ''),
+                                'sku': item.get('sku', ''),
+                                'category': item.get('category', ''),
+                                'rating': rating_data.get('ratingValue') if rating_data else None,
+                                'review_count': rating_data.get('ratingCount') if rating_data else None,
+                            }
 
-            except:
+                # Direkt Product objesi
+                elif isinstance(data, dict) and data.get('@type') == 'Product':
+                    offers = data.get('offers', {})
+                    image_data = data.get('image', [])
+                    images = image_data if isinstance(image_data, list) else [image_data] if image_data else []
+
+                    brand_data = data.get('brand', {})
+                    brand = brand_data.get('name') if isinstance(brand_data, dict) else str(brand_data)
+
+                    rating_data = data.get('aggregateRating', {})
+
+                    logger.info(f"✅ Hepsiburada JSON-LD başarılı: {data.get('name', '')[:50]}")
+                    return {
+                        'title': data.get('name'),
+                        'price': float(offers.get('price', 0)),
+                        'brand': brand or '',
+                        'image_url': images[0] if images else '',
+                        'description': data.get('description', ''),
+                        'sku': data.get('sku', ''),
+                        'category': data.get('category', ''),
+                        'rating': rating_data.get('ratingValue') if rating_data else None,
+                        'review_count': rating_data.get('ratingCount') if rating_data else None,
+                    }
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON-LD parse error: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"JSON-LD processing error: {e}")
                 continue
 
-        # Fallback: Meta tags
-        if not result['title']:
-            og_title = soup.find('meta', property='og:title')
-            if og_title:
-                result['title'] = og_title.get('content', '')
-
-        if not result['image_url']:
-            og_image = soup.find('meta', property='og:image')
-            if og_image:
-                result['image_url'] = og_image.get('content', '')
-
-        # Hepsiburada dataLayer başarısız olursa meta_html_fallback dene
-        if not (result['title'] and result['price'] > 0):
-            logger.info("🔄 Hepsiburada dataLayer başarısız, meta_html_fallback deneniyor...")
-            fallback_result = scrape_meta_html_fallback(soup, url)
-            if fallback_result:
-                return fallback_result
-
-        return result if result['title'] and result['price'] > 0 else None
+        logger.error("No Product found in JSON-LD")
+        return None
 
     except Exception as e:
-        logger.error(f"⚠️ Hepsiburada dataLayer: {str(e)}")
+        logger.error(f"Hepsiburada scrape failed: {e}")
+        return None
+
+# ============================================
+# AKINON PLATFORM PARSER (Enza Home, İstikbal, Bellona, Doğtaş, Mondi, Alfemo)
+# ============================================
+def scrape_enza_akinon(url, use_cloudscraper=False):
+    """Scrape Enza Home and other Akinon platform sites using hidden dataLayer"""
+    try:
+        logger.info(f"Trying Akinon platform parser for {url}")
+        response, error = fetch_with_retry(url, timeout=20, use_cloudscraper=use_cloudscraper)
+
+        if not response or response.status_code != 200:
+            logger.error(f"Failed to fetch Akinon site: {url} (status: {response.status_code if response else 'None'})")
+            return None
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Hidden div içindeki JSON'ı bul
+        datalayer_div = soup.find('div', class_='js-datalayer-group-item')
+        if datalayer_div and datalayer_div.string:
+            try:
+                data = json.loads(datalayer_div.string.strip())
+                product = data.get('product', {})
+
+                if product:
+                    # Görsel URL'lerini bul
+                    images = []
+                    img_tags = soup.find_all('img', class_='product-image')
+                    for img in img_tags:
+                        src = img.get('src') or img.get('data-src')
+                        if src and src.startswith('http'):
+                            images.append(src)
+
+                    # Ürün başlığını bul - tam başlık HTML'de
+                    title_elem = soup.find('h1', class_='product-name') or soup.find('div', class_='combine-product-info-title')
+                    if title_elem:
+                        title_link = title_elem.find('a')
+                        title = title_link.get_text(strip=True) if title_link else title_elem.get_text(strip=True)
+                    else:
+                        title = product.get('name')
+
+                    # Açıklama - HTML tag'lerini temizle
+                    description = product.get('attributes', {}).get('integration_item_short_desc', '')
+                    if description:
+                        description = BeautifulSoup(description, 'html.parser').get_text(strip=True)
+
+                    # Marka bilgisini attributes'tan al
+                    brand = product.get('attributes', {}).get('integration_marka', '')
+                    if not brand:
+                        # Domain'e göre default marka
+                        if 'enzahome' in url:
+                            brand = 'Yatas Enza'
+                        elif 'istikbal' in url:
+                            brand = 'İstikbal'
+                        elif 'bellona' in url:
+                            brand = 'Bellona'
+                        elif 'dogtas' in url:
+                            brand = 'Doğtaş'
+                        elif 'mondi' in url:
+                            brand = 'Mondi'
+                        elif 'alfemo' in url:
+                            brand = 'Alfemo'
+
+                    logger.info(f"✅ Akinon başarılı: {title[:50] if title else 'N/A'}")
+                    return {
+                        'title': title,
+                        'price': float(product.get('price', 0)),
+                        'brand': brand,
+                        'image_url': images[0] if images else '',
+                        'description': description,
+                        'sku': product.get('sku', ''),
+                        'category': product.get('attributes', {}).get('integration_kategori_adi', ''),
+                        'in_stock': int(product.get('stock', 0)) > 0,
+                        'retail_price': product.get('retail_price'),
+                    }
+            except json.JSONDecodeError as e:
+                logger.warning(f"Akinon dataLayer parse error: {e}")
+            except Exception as e:
+                logger.warning(f"Akinon data processing error: {e}")
+
+        logger.error("No dataLayer found in Akinon page")
+        return None
+
+    except Exception as e:
+        logger.error(f"Akinon scrape failed: {e}")
         return None
 
 # ============================================
@@ -852,177 +947,92 @@ def parse_woocommerce_product(url, soup, use_cloudscraper=False):
         return None
 
 # ============================================
-# SHOPIFY PARSER (Enza Home, Normod vb.)
+# SHOPIFY PARSER (Normod, Vivense vb.)
 # ============================================
-def parse_shopify_product(url, use_cloudscraper=False):
-    """
-    Shopify siteler için geliştirilmiş parser
-    - JSON API önce dene
-    - Başarısız olursa HTML'den çek
-    """
+def scrape_shopify(url):
+    """Scrape Shopify-based sites (Normod, Vivense)"""
     try:
         logger.info(f"Trying Shopify parser for {url}")
-        parsed = urlparse(url)
-        domain = parsed.netloc
-        base_url = f"{parsed.scheme}://{domain}"
-        path = parsed.path.strip('/')
-
-        # Handle extraction - URL'den /products/ sonrasını al, query/hash temizle
-        handle = ''
-
-        # /products/ pattern'ini bul
-        if '/products/' in url:
-            # URL'den /products/ sonrasını al
-            products_idx = url.find('/products/')
-            if products_idx != -1:
-                after_products = url[products_idx + len('/products/'):]
-                # Query ve hash'i temizle
-                handle = after_products.split('?')[0].split('#')[0].split('/')[0]
-        else:
-            # Enza Home formatı: /{handle}/
-            segments = [s for s in path.split('/') if s and s not in ['tr', 'en', 'de', 'products']]
-            if segments:
-                handle = segments[-1].split('?')[0].split('#')[0]
-
-        if not handle:
-            logger.warning(f"Shopify: Handle bulunamadı - URL: {url}")
+        parts = url.rstrip('/').split('/products/')
+        if len(parts) < 2:
+            logger.error(f"Invalid Shopify URL format: {url}")
             return None
 
-        logger.info(f"Shopify handle: {handle}")
-
-        # Yöntem 1: JSON API
+        handle = parts[1].split('?')[0].split('#')[0].rstrip('/')
+        base_url = parts[0]
         json_url = f"{base_url}/products/{handle}.json"
 
-        # Shopify genelde Cloudflare kullanmaz, ama parametre gelirse kullan
-        response, error = fetch_with_retry(json_url, timeout=20, use_cloudscraper=use_cloudscraper)
+        logger.info(f"Trying Shopify JSON endpoint: {json_url}")
+        response, error = fetch_with_retry(json_url, timeout=20, use_cloudscraper=False)
 
-        if response and response.status_code == 200:
-            try:
-                data = response.json()
-                # Shopify API yanıtı direkt product objesi VEYA {"product": {...}} formatında olabilir
-                product = data.get('product', data)
+        # Eğer response yok veya 404 dönerse, bu site Shopify değil
+        if not response:
+            logger.warning(f"Failed to fetch Shopify JSON: {json_url}")
+            return None
 
-                if product and isinstance(product, dict):
-                    variants = product.get('variants', [])
-                    first_variant = variants[0] if variants else {}
+        if response.status_code == 404:
+            logger.warning(f"Not a Shopify site or product not found: {url}")
+            return None
 
-                    # Fiyat - string olarak gelir
-                    price_str = first_variant.get('price', '0')
-                    try:
-                        price = float(price_str)
-                        # Kuruş kontrolü (Türk siteleri için)
-                        if price > 50000 and '.' not in str(price_str):
-                            price = price / 100
-                    except:
-                        price = 0
-
-                    images = product.get('images', [])
-                    image_url = images[0].get('src', '') if images else ''
-
-                    result = {
-                        'title': product.get('title', ''),
-                        'price': price,
-                        'image_url': image_url,
-                        'brand': product.get('vendor', ''),
-                        'description': BeautifulSoup(product.get('body_html', '') or '', 'html.parser').get_text(strip=True)[:500],
-                    }
-
-                    if result['title'] and result['price'] > 0:
-                        logger.info(f"✅ Shopify JSON API başarılı: {result['title'][:50]}")
-                        return result
-            except Exception as e:
-                logger.warning(f"Shopify JSON parse hatası: {e}")
-
-        # Yöntem 2: HTML'den Klaviyo/dataLayer çek
-        logger.info(f"🔄 Shopify JSON başarısız, HTML deneniyor...")
-
-        try:
-            html_url = url
-            response, error = fetch_with_retry(html_url, timeout=20, use_cloudscraper=use_cloudscraper)
-
-            if response and response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                html_text = response.text
-
-                result = {'title': '', 'price': 0, 'brand': '', 'image_url': ''}
-
-                # Klaviyo tracking (var item = {...})
-                klaviyo_pattern = r'var\s+item\s*=\s*({[\s\S]*?});'
-                klaviyo_match = re.search(klaviyo_pattern, html_text)
-                if klaviyo_match:
-                    try:
-                        item_data = json.loads(klaviyo_match.group(1))
-                        result['title'] = item_data.get('Name', '') or item_data.get('ProductName', '')
-
-                        price_val = item_data.get('Price', '') or item_data.get('Value', '')
-                        if price_val:
-                            price_str = str(price_val).replace('TL', '').replace('.', '').replace(',', '.').strip()
-                            try:
-                                result['price'] = float(price_str)
-                            except:
-                                pass
-
-                        result['brand'] = item_data.get('Brand', '')
-                        result['image_url'] = item_data.get('ImageURL', '') or item_data.get('ProductImageURL', '')
-                    except:
-                        pass
-
-                # Meta tags fallback
-                if not result['title']:
-                    og_title = soup.find('meta', property='og:title')
-                    if og_title:
-                        result['title'] = og_title.get('content', '').split('|')[0].split('–')[0].strip()
-
-                if not result['price']:
-                    # Fiyat için çeşitli selectors dene
-                    price_selectors = [
-                        '.product__price', '.price', '.product-price',
-                        '[data-product-price]', '.money', '.current-price',
-                        'span[data-price]', '.ProductPrice'
-                    ]
-                    for sel in price_selectors:
-                        el = soup.select_one(sel)
-                        if el:
-                            price_text = el.get_text(strip=True)
-                            price_clean = re.sub(r'[^\d,.]', '', price_text)
-                            price_clean = price_clean.replace('.', '').replace(',', '.')
-                            try:
-                                result['price'] = float(price_clean)
-                                if result['price'] > 0:
-                                    break
-                            except:
-                                continue
-
-                if not result['image_url']:
-                    og_image = soup.find('meta', property='og:image')
-                    if og_image:
-                        result['image_url'] = og_image.get('content', '')
-
-                if result['title'] or result['price'] > 0:
-                    logger.info(f"✅ Shopify HTML başarılı: {result['title'][:50] if result['title'] else 'N/A'}")
-                    return result
-
-        except Exception as e:
-            logger.error(f"⚠️ Shopify HTML hatası: {e}")
-
-        # Yöntem 3: Meta HTML fallback (son şans)
-        logger.info(f"🔄 Shopify HTML başarısız, meta_html_fallback deneniyor...")
-        try:
-            fallback_response, error = fetch_with_retry(url, timeout=20, use_cloudscraper=use_cloudscraper)
-            if fallback_response and fallback_response.status_code == 200:
-                fallback_soup = BeautifulSoup(fallback_response.content, 'html.parser')
-                fallback_result = scrape_meta_html_fallback(fallback_soup, url)
-                if fallback_result:
-                    logger.info(f"✅ Shopify meta_html_fallback başarılı")
-                    return fallback_result
-        except Exception as e:
-            logger.error(f"⚠️ Shopify meta_html_fallback hatası: {e}")
-
-        return None
+        if response.status_code == 200:
+            return parse_shopify_product(response.json())
 
     except Exception as e:
-        logger.error(f"⚠️ Shopify parser hatası: {e}")
-        return None
+        logger.error(f"Shopify scrape failed for {url}: {e}")
+    return None
+
+
+def parse_shopify_product(data):
+    """Parse Shopify product JSON"""
+    try:
+        logger.info(f"Parsing Shopify product data")
+        # Shopify yanıtı direkt product objesi veya {"product": {...}} olabilir
+        if isinstance(data, dict):
+            product = data.get('product', data)
+
+            if not product or not isinstance(product, dict):
+                logger.warning("No valid product data in Shopify response")
+                return None
+
+            # İlk variant'ı al
+            variants = product.get('variants', [])
+            first_variant = variants[0] if variants else {}
+
+            # Fiyat - string veya number olabilir
+            price_val = first_variant.get('price', 0)
+            try:
+                price = float(price_val) if price_val else 0
+            except:
+                price = 0
+
+            # Images listesi oluştur
+            images = []
+            for img in product.get('images', []):
+                if isinstance(img, dict):
+                    src = img.get('src')
+                    if src:
+                        images.append(src)
+                elif isinstance(img, str):
+                    images.append(img)
+
+            # Description HTML'den temizle
+            description = product.get('body_html', '')
+            if description:
+                description = BeautifulSoup(description, 'html.parser').get_text(strip=True)[:500]
+
+            logger.info(f"✅ Shopify parse başarılı: {product.get('title', '')[:50]}")
+            return {
+                'title': product.get('title'),
+                'price': price,
+                'brand': product.get('vendor'),
+                'image_url': images[0] if images else '',
+                'description': description,
+                'in_stock': first_variant.get('available', False),
+                'sku': first_variant.get('sku'),
+            }
+    except Exception as e:
+        logger.error(f"Shopify parse error: {e}")
+    return None
 
 # ============================================
 # NEXT.JS PARSER (Karaca, Zara Home vb.)
@@ -2069,8 +2079,12 @@ def scrape_product(url):
                 site_specific_data = scrape_api_trendyol(normalized_url, session)
 
             elif handler == 'shopify':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                site_specific_data = parse_shopify_product(normalized_url, use_cloudscraper=False)
+                logger.info(f"Trying Shopify handler for {normalized_url}")
+                site_specific_data = scrape_shopify(normalized_url)
+
+            elif handler == 'akinon':
+                logger.info(f"Trying Akinon platform handler for {normalized_url}")
+                site_specific_data = scrape_enza_akinon(normalized_url, use_cloudscraper=False)
 
             elif handler == 'nextjs':
                 logger.info(f"Trying {handler} for {normalized_url}")
@@ -2084,12 +2098,19 @@ def scrape_product(url):
                 logger.info(f"Trying {handler} for {normalized_url}")
                 site_specific_data = scrape_ikea(normalized_url, soup, use_cloudscraper=True)
 
+            elif handler == 'jsonld':
+                # JSON-LD parser (Hepsiburada, Arçelik, Beko, etc.)
+                if 'hepsiburada' in domain:
+                    logger.info(f"Trying Hepsiburada JSON-LD for {normalized_url}")
+                    site_specific_data = scrape_hepsiburada(normalized_url, use_cloudscraper=True)
+                else:
+                    logger.info(f"Trying generic JSON-LD for {normalized_url}")
+                    # Generic fallback'te extract_json_ld zaten çağrılıyor
+                    site_specific_data = None
+
             elif handler == 'datalayer':
                 # Site-specific dataLayer parsers
-                if 'hepsiburada' in domain:
-                    logger.info(f"Trying Hepsiburada dataLayer for {normalized_url}")
-                    site_specific_data = scrape_datalayer_hepsiburada(normalized_url, soup, html_text, use_cloudscraper=True)
-                elif 'karaca' in domain:
+                if 'karaca' in domain:
                     logger.info(f"Trying Karaca dataLayer for {normalized_url}")
                     site_specific_data = scrape_datalayer_karaca(normalized_url, soup, html_text, use_cloudscraper=True)
                 else:
@@ -2098,12 +2119,6 @@ def scrape_product(url):
                     hidden_data = extract_hidden_json_data(soup, html_text)
                     if hidden_data and (hidden_data.get('title') or hidden_data.get('price')):
                         site_specific_data = hidden_data
-
-            elif handler == 'jsonld':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                # JSON-LD parser (Arçelik, Beko, Vestel, Bosch, Siemens, Bellona, İstikbal, Yataş, Altus)
-                # Generic fallback'te extract_json_ld zaten çağrılıyor, buraya özel bir şey gerekmez
-                site_specific_data = None
 
             elif handler == 'jsonld_datalayer':
                 logger.info(f"Trying {handler} for {normalized_url}")
