@@ -815,15 +815,47 @@ def extract_hidden_json_data(soup, html_text):
                 # Items (GA4 format)
                 if 'items' in ecommerce and len(ecommerce['items']) > 0:
                     item = ecommerce['items'][0]
+
+                    # Title extraction (item_name or name)
                     if not result['title']:
-                        result['title'] = item.get('item_name', '')
+                        result['title'] = item.get('item_name', '') or item.get('name', '')
+
+                    # Price extraction with multiple formats
                     if not result['price']:
+                        price_val = item.get('price', 0) or item.get('item_price', 0)
                         try:
-                            result['price'] = float(item.get('price', 0))
+                            price_float = float(price_val)
+                            # Bazı siteler fiyatı cent cinsinden gönderir (örn: 269900 = 2699.00 TL)
+                            # Eğer fiyat 10000'den büyükse ve ondalık kısmı yoksa, cent olabilir
+                            if price_float > 10000 and price_float == int(price_float):
+                                # Muhtemelen cent cinsinden, 100'e böl
+                                result['price'] = price_float / 100
+                            else:
+                                result['price'] = price_float
                         except:
                             pass
+
+                    # Brand extraction
                     if not result['brand']:
-                        result['brand'] = item.get('item_brand', '')
+                        result['brand'] = item.get('item_brand', '') or item.get('brand', '')
+
+                    # Image URL extraction (GA4 genellikle image gönderir)
+                    if not result['image_url']:
+                        img = item.get('item_image', '') or item.get('image_url', '') or item.get('image', '')
+                        if img and img.startswith('http'):
+                            result['image_url'] = img
+
+                    # SKU/GTIN extraction
+                    if not result.get('sku'):
+                        result['sku'] = item.get('item_id', '') or item.get('sku', '')
+
+                    # Category extraction
+                    if not result.get('category'):
+                        cat = (item.get('item_category', '') or
+                               item.get('item_category1', '') or
+                               item.get('category', ''))
+                        if cat:
+                            result['category'] = cat
 
             # Eğer bulunduysa döndür
             if result['title'] or result['price']:

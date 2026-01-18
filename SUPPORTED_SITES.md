@@ -256,29 +256,43 @@ dataLayer.push({
     - 5 dakika TTL cache sistemi ✅
     - Domain bazlı rate limiting ✅
     - Otomatik cache temizliği ✅
+11. ✅ **GA4 dataLayer Parser** (YENİ!)
+    - `ecommerce.items[]` GA4 format ✅
+    - Dual format support (GA4 + GA Universal) ✅
+    - Price cent detection (auto /100) ✅
+    - Image URL extraction (item_image) ✅
+    - Category/SKU extraction ✅
+    - MediaMarkt, Teknosa, Vatan için hazır ✅
 
 ### 🔄 DEVAM EDEN
 
-11. 🔄 **Gerçek URL Testleri**
+12. 🔄 **Gerçek URL Testleri**
    - Her kategoriden test URL'leri ile doğrulama
    - Trendyol API test ⚪
    - IKEA parser test ⚪
    - Karaca (dataLayer) re-test ⚪
    - Normod (Shopify + Klaviyo) re-test ⚪
+   - MediaMarkt (GA4) test ⚪
+   - Teknosa (GA4) test ⚪
 
 ### ⚪ PLANLANANLAR (Bir Sonraki Sprint)
 
-12. ⚪ **GA4 dataLayer Parser**
-    - `ecommerce.items[]` format
-    - MediaMarkt, Teknosa için özel parser
-    - item_name, price, item_brand fields
-
 13. ⚪ **Hepsiburada İyileştirme**
-    - dataLayer parser test
+    - GA4 + GA Universal hybrid test
     - SKU extraction kontrol
     - format:webp görsel optimizasyonu
 
-14. ⚪ **Playwright Fallback (Son Çare)**
+14. ⚪ **Zara Home & H&M Home Test**
+    - Next.js __NEXT_DATA__ parser test
+    - Product data path validation
+    - Image URL extraction
+
+15. ⚪ **English Home & Madame Coco Test**
+    - WooCommerce parser test
+    - .product_title, .woocommerce-Price-amount selectors
+    - .wp-post-image validation
+
+16. ⚪ **Playwright Fallback (Son Çare)**
     - JS rendering gereken siteler için
     - Sadece diğer methodlar başarısız olursa
     - Headless browser ile scraping
