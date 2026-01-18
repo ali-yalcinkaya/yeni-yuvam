@@ -746,12 +746,14 @@ def fetch_with_retry(url, max_retries=3):
     403/503 hatası alırsa farklı UA ile tekrar dener
     """
     session = requests.Session()
+    # Proxy'leri devre dışı bırak (Replit ortamı için)
+    session.trust_env = False
 
     for attempt in range(max_retries):
         headers = USER_AGENTS[attempt % len(USER_AGENTS)].copy()
 
         try:
-            response = session.get(url, headers=headers, timeout=20, allow_redirects=True)
+            response = session.get(url, headers=headers, timeout=20, allow_redirects=True, proxies={})
 
             # 403/503 hatası - farklı UA ile tekrar dene
             if response.status_code in [403, 503] and attempt < max_retries - 1:
