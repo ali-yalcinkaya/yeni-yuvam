@@ -2009,11 +2009,471 @@ def fetch_with_retry(url, max_retries=3, use_cloudscraper=False, timeout=30):
     return None, 'Maksimum deneme sayısı aşıldı'
 
 # ============================================
-# ANA FONKSİYON
+# PLATFORM TESPİT SİSTEMİ
+# ============================================
+def detect_ecommerce_platform(url, html_content, soup=None):
+    """
+    E-ticaret platformunu otomatik tespit eder
+
+    Args:
+        url: Ürün URL'i
+        html_content: HTML içeriği
+        soup: BeautifulSoup objesi (opsiyonel, yoksa oluşturulur)
+
+    Returns:
+        tuple: (platform_name, detection_reason)
+        Platformlar: 'shopify', 'akinon', 'jsonld', 'nextjs', 'datalayer', 'woocommerce', 'meta_html'
+    """
+    if soup is None:
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+    # 1. Shopify testi - /products/ içeren URL'ler için JSON endpoint kontrolü
+    if '/products/' in url:
+        try:
+            # URL'den handle çıkar
+            parsed = urlparse(url)
+            path_parts = parsed.path.split('/')
+            if 'products' in path_parts:
+                idx = path_parts.index('products')
+                if idx + 1 < len(path_parts):
+                    handle = path_parts[idx + 1].split('?')[0]
+                    json_url = f"{parsed.scheme}://{parsed.netloc}/products/{handle}.json"
+
+                    # HEAD request ile kontrol et
+                    try:
+                        resp = requests.head(json_url, timeout=5, allow_redirects=True)
+                        if resp.status_code == 200:
+                            logger.info(f"✓ Shopify platform detected: {json_url} endpoint exists")
+                            return ('shopify', 'JSON endpoint available')
+                    except:
+                        pass
+        except Exception as e:
+            logger.debug(f"Shopify test error: {e}")
+
+    # 2. Akinon platform testi
+    if 'js-datalayer-group-item' in html_content or 'akinoncloud.com' in html_content:
+        logger.info("✓ Akinon platform detected: marker classes found")
+        return ('akinon', 'Akinon marker detected')
+
+    # 3. JSON-LD schema testi
+    json_ld_scripts = soup.find_all('script', type='application/ld+json')
+    for script in json_ld_scripts:
+        try:
+            data = json.loads(script.string)
+            # @type kontrolü
+            if isinstance(data, dict):
+                if data.get('@type') == 'Product':
+                    logger.info("✓ JSON-LD platform detected: Product schema found")
+                    return ('jsonld', 'Product schema in JSON-LD')
+                # @graph içinde Product ara
+                if '@graph' in data:
+                    for item in data['@graph']:
+                        if item.get('@type') == 'Product':
+                            logger.info("✓ JSON-LD platform detected: Product in @graph")
+                            return ('jsonld', 'Product in @graph')
+        except:
+            continue
+
+    # 4. Next.js testi
+    nextjs_script = soup.find('script', id='__NEXT_DATA__')
+    if nextjs_script:
+        logger.info("✓ Next.js platform detected: __NEXT_DATA__ found")
+        return ('nextjs', '__NEXT_DATA__ script found')
+
+    # 5. dataLayer testi
+    if re.search(r'dataLayer\.push|var dataLayer|window\.dataLayer', html_content):
+        logger.info("✓ DataLayer platform detected: dataLayer pattern found")
+        return ('datalayer', 'dataLayer variables found')
+
+    # 6. WooCommerce testi
+    if 'woocommerce' in html_content.lower() or 'wp-content/plugins/woocommerce' in html_content:
+        logger.info("✓ WooCommerce platform detected: WooCommerce markers found")
+        return ('woocommerce', 'WooCommerce detected')
+
+    # 7. Fallback - Meta/HTML
+    logger.info("⚡ No specific platform detected, using meta_html fallback")
+    return ('meta_html', 'Generic fallback')
+
+
+def scrape_jsonld_from_soup(soup, url):
+    """
+    JSON-LD schema'dan ürün bilgilerini çıkarır
+
+    Args:
+        soup: BeautifulSoup objesi
+        url: Ürün URL'i
+
+    Returns:
+        dict veya None: Ürün bilgileri
+    """
+    try:
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+
+        for script in json_ld_scripts:
+            try:
+                data = json.loads(script.string)
+                product_data = None
+
+                # Direct Product
+                if isinstance(data, dict) and data.get('@type') == 'Product':
+                    product_data = data
+                # Product in @graph
+                elif isinstance(data, dict) and '@graph' in data:
+                    for item in data['@graph']:
+                        if item.get('@type') == 'Product':
+                            product_data = item
+                            break
+
+                if product_data:
+                    # Offers bilgilerini çıkar
+                    offers = product_data.get('offers', {})
+                    if isinstance(offers, list) and len(offers) > 0:
+                        offers = offers[0]
+
+                    price = 0
+                    if offers.get('price'):
+                        try:
+                            price = float(offers['price'])
+                        except:
+                            price = 0
+
+                    # Image URL
+                    image_url = ''
+                    if 'image' in product_data:
+                        img = product_data['image']
+                        if isinstance(img, list):
+                            image_url = img[0] if img else ''
+                        elif isinstance(img, dict):
+                            image_url = img.get('url', '')
+                        else:
+                            image_url = str(img)
+
+                    result = {
+                        'title': product_data.get('name', ''),
+                        'price': price,
+                        'brand': product_data.get('brand', {}).get('name', '') if isinstance(product_data.get('brand'), dict) else str(product_data.get('brand', '')),
+                        'description': product_data.get('description', ''),
+                        'image_url': image_url,
+                        'sku': product_data.get('sku', ''),
+                        'category': product_data.get('category', ''),
+                    }
+
+                    logger.info(f"✓ JSON-LD parsed: {result['title'][:50]}... - {result['price']} TL")
+                    return result
+
+            except Exception as e:
+                logger.debug(f"JSON-LD parse error: {e}")
+                continue
+
+        return None
+
+    except Exception as e:
+        logger.error(f"✗ JSON-LD extraction failed: {e}")
+        return None
+
+
+def scrape_datalayer_from_soup(soup, url, html_content):
+    """
+    dataLayer değişkenlerinden ürün bilgilerini çıkarır
+
+    Args:
+        soup: BeautifulSoup objesi
+        url: Ürün URL'i
+        html_content: HTML içeriği
+
+    Returns:
+        dict veya None: Ürün bilgileri
+    """
+    try:
+        # dataLayer pattern'lerini ara
+        patterns = [
+            r'dataLayer\.push\((\{[^}]+\})\)',
+            r'var dataLayer = (\[.+?\]);',
+            r'window\.dataLayer = (\[.+?\]);',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, html_content, re.DOTALL)
+            for match in matches:
+                try:
+                    data = json.loads(match)
+
+                    # Array ise ilk elementi al
+                    if isinstance(data, list) and len(data) > 0:
+                        data = data[0]
+
+                    # ecommerce.detail.products yapısını ara
+                    product_data = None
+                    if 'ecommerce' in data:
+                        ecom = data['ecommerce']
+                        if 'detail' in ecom and 'products' in ecom['detail']:
+                            products = ecom['detail']['products']
+                            if isinstance(products, list) and len(products) > 0:
+                                product_data = products[0]
+                        elif 'products' in ecom:
+                            products = ecom['products']
+                            if isinstance(products, list) and len(products) > 0:
+                                product_data = products[0]
+
+                    if product_data:
+                        result = {
+                            'title': product_data.get('name', ''),
+                            'price': float(product_data.get('price', 0)),
+                            'brand': product_data.get('brand', ''),
+                            'category': product_data.get('category', ''),
+                            'image_url': product_data.get('image', ''),
+                        }
+
+                        logger.info(f"✓ DataLayer parsed: {result['title'][:50]}... - {result['price']} TL")
+                        return result
+
+                except Exception as e:
+                    logger.debug(f"DataLayer parse attempt failed: {e}")
+                    continue
+
+        # Bulunamadıysa meta_html fallback
+        logger.info("⚡ DataLayer not found, falling back to meta_html")
+        return scrape_meta_html_from_soup(soup, url)
+
+    except Exception as e:
+        logger.error(f"✗ DataLayer extraction failed: {e}")
+        return None
+
+
+def scrape_nextjs_from_soup(soup, url):
+    """
+    Next.js __NEXT_DATA__ script'inden ürün bilgilerini çıkarır
+
+    Args:
+        soup: BeautifulSoup objesi
+        url: Ürün URL'i
+
+    Returns:
+        dict veya None: Ürün bilgileri
+    """
+    try:
+        nextjs_script = soup.find('script', id='__NEXT_DATA__')
+        if not nextjs_script:
+            return None
+
+        data = json.loads(nextjs_script.string)
+
+        # Yaygın Next.js yapıları
+        product_data = None
+
+        # props.pageProps.product
+        if 'props' in data and 'pageProps' in data['props']:
+            page_props = data['props']['pageProps']
+            if 'product' in page_props:
+                product_data = page_props['product']
+            elif 'productData' in page_props:
+                product_data = page_props['productData']
+            elif 'initialData' in page_props and 'product' in page_props['initialData']:
+                product_data = page_props['initialData']['product']
+
+        if product_data:
+            result = {
+                'title': product_data.get('name', '') or product_data.get('title', ''),
+                'price': float(product_data.get('price', 0)),
+                'brand': product_data.get('brand', ''),
+                'description': product_data.get('description', ''),
+                'image_url': product_data.get('image', '') or product_data.get('imageUrl', ''),
+            }
+
+            logger.info(f"✓ Next.js parsed: {result['title'][:50]}... - {result['price']} TL")
+            return result
+
+        return None
+
+    except Exception as e:
+        logger.error(f"✗ Next.js extraction failed: {e}")
+        return None
+
+
+def scrape_woocommerce_from_soup(soup, url):
+    """
+    WooCommerce sitelerinden ürün bilgilerini çıkarır
+
+    Args:
+        soup: BeautifulSoup objesi
+        url: Ürün URL'i
+
+    Returns:
+        dict veya None: Ürün bilgileri
+    """
+    try:
+        # Title selectors
+        title = ''
+        title_selectors = [
+            'h1.product_title',
+            'h1.product-title',
+            '.product-name',
+            'h1[itemprop="name"]',
+        ]
+        for selector in title_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+
+        # Price selectors
+        price = 0
+        price_selectors = [
+            '.price .woocommerce-Price-amount',
+            '.woocommerce-Price-amount.amount',
+            'p.price',
+            '.price ins .amount',
+            '[itemprop="price"]',
+        ]
+        for selector in price_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                price_text = elem.get_text(strip=True)
+                # Sadece sayıları çıkar
+                price_match = re.search(r'[\d,.]+', price_text.replace('.', '').replace(',', '.'))
+                if price_match:
+                    try:
+                        price = float(price_match.group(0))
+                        break
+                    except:
+                        pass
+
+        # Image
+        image_url = ''
+        img_selectors = [
+            '.woocommerce-product-gallery__image img',
+            '.product-images img',
+            'img.wp-post-image',
+        ]
+        for selector in img_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                image_url = elem.get('src', '') or elem.get('data-src', '')
+                if image_url:
+                    break
+
+        if title and price:
+            result = {
+                'title': title,
+                'price': price,
+                'image_url': image_url,
+                'brand': '',
+            }
+            logger.info(f"✓ WooCommerce parsed: {result['title'][:50]}... - {result['price']} TL")
+            return result
+
+        return None
+
+    except Exception as e:
+        logger.error(f"✗ WooCommerce extraction failed: {e}")
+        return None
+
+
+def scrape_meta_html_from_soup(soup, url):
+    """
+    Meta tag'ler ve HTML selector'lardan ürün bilgilerini çıkarır (Generic fallback)
+
+    Args:
+        soup: BeautifulSoup objesi
+        url: Ürün URL'i
+
+    Returns:
+        dict veya None: Ürün bilgileri
+    """
+    try:
+        # Meta tags
+        title = ''
+        price = 0
+        image_url = ''
+        brand = ''
+        description = ''
+
+        # Title
+        og_title = soup.find('meta', property='og:title')
+        if og_title:
+            title = og_title.get('content', '')
+        if not title:
+            title_tag = soup.find('title')
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+
+        # Price
+        price_meta = soup.find('meta', property='og:price:amount')
+        if price_meta:
+            try:
+                price = float(price_meta.get('content', 0))
+            except:
+                pass
+
+        # Image
+        og_image = soup.find('meta', property='og:image')
+        if og_image:
+            image_url = og_image.get('content', '')
+
+        # Brand
+        brand_meta = soup.find('meta', property='product:brand')
+        if brand_meta:
+            brand = brand_meta.get('content', '')
+
+        # Description
+        og_desc = soup.find('meta', property='og:description')
+        if og_desc:
+            description = og_desc.get('content', '')
+
+        # HTML fallback - title
+        if not title:
+            h1 = soup.find('h1')
+            if h1:
+                title = h1.get_text(strip=True)
+
+        # HTML fallback - price (yaygın class'lar)
+        if not price:
+            price_selectors = [
+                '.price', '.product-price', '.price-tag',
+                '[class*="price"]', '[id*="price"]'
+            ]
+            for selector in price_selectors:
+                elem = soup.select_one(selector)
+                if elem:
+                    price_text = elem.get_text(strip=True)
+                    price_match = re.search(r'[\d,.]+', price_text.replace('.', '').replace(',', '.'))
+                    if price_match:
+                        try:
+                            price = float(price_match.group(0))
+                            break
+                        except:
+                            pass
+
+        result = {
+            'title': title,
+            'price': price,
+            'image_url': image_url,
+            'brand': brand,
+            'description': description,
+        }
+
+        logger.info(f"✓ Meta/HTML parsed: {result['title'][:50]}... - {result['price']} TL")
+        return result
+
+    except Exception as e:
+        logger.error(f"✗ Meta/HTML extraction failed: {e}")
+        return None
+
+
+# ============================================
+# ANA FONKSİYON - YENİ MİMARİ v3.0
 # ============================================
 def scrape_product(url):
     """
-    YENİ MİMARİ v2.0 - Akıllı Scraping
+    YENİ MİMARİ v3.0 - Otomatik Platform Tespit Sistemi
+
+    Artık her yeni site için manuel konfigürasyon gerekmez!
+    Sistem otomatik olarak platformu tespit edip uygun parser'ı kullanır.
+
+    3 Aşamalı Mimari:
+    1. Bilinen siteler → Hızlı yönlendirme
+    2. Bilinmeyen siteler → Otomatik platform tespiti
+    3. Platform-handler routing → Uygun parser çağrısı
 
     Returns:
         dict: {
@@ -2023,6 +2483,7 @@ def scrape_product(url):
         }
     """
     try:
+        logger.info(f"═══ Starting scrape for {url} ═══")
         # 0. CACHE KONTROLÜ
         cached_result = get_from_cache(url)
         if cached_result:
@@ -2040,117 +2501,189 @@ def scrape_product(url):
         domain = urlparse(normalized_url).netloc.lower()
         wait_for_rate_limit(domain)
 
-        # Cloudflare korumalı siteleri tanımla
+        # ============ AŞAMA 1: BİLİNEN SİTELER - HIZLI YÖNLENDİRME ============
+        # Bilinen siteler için domain → handler mapping
+        KNOWN_SITES = {
+            'trendyol.com': ('trendyol', scrape_api_trendyol),
+            'hepsiburada.com': ('hepsiburada', scrape_hepsiburada),
+            'karaca.com': ('karaca', scrape_datalayer_karaca),
+            'ikea.com': ('ikea', scrape_ikea),
+            'enzahome.com': ('akinon', scrape_enza_akinon),
+            'alfemo.com': ('akinon', scrape_enza_akinon),
+            'istikbal.com': ('akinon', scrape_enza_akinon),
+            'bellona.com': ('akinon', scrape_enza_akinon),
+        }
+
+        # Cloudflare korumalı siteler
         cloudflare_sites = ['hepsiburada.com', 'ikea.com', 'karaca.com', 'vatan.com',
-                            'teknosa.com', 'mediamarkt.com', 'n11.com', 'ciceksepeti.com']
-        use_cf = any(site in domain for site in cloudflare_sites)
+                            'teknosa.com', 'mediamarkt.com.tr', 'n11.com', 'ciceksepeti.com']
 
-        # Önce masaüstü URL'i dene - timeout'u sitenin özelliğine göre ayarla
-        timeout = 30 if 'ikea' in domain else 20
-        response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
+        # Domain kontrolü
+        is_known_site = False
+        handler_name = None
+        handler_func = None
 
-        # Masaüstü başarısız olduysa ve orijinal mobil ise, mobil'i dene
-        if not response and was_mobile:
-            response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
-            if response:
-                normalized_url = url  # Mobil çalıştı, onu kullan
+        for site_domain, (name, func) in KNOWN_SITES.items():
+            if site_domain in domain:
+                is_known_site = True
+                handler_name = name
+                handler_func = func
+                logger.info(f"✓ Known site detected: {handler_name}")
+                break
 
-        if not response or response.status_code != 200:
-            logger.error(f"Failed to fetch {normalized_url}: {error}")
-            return {'success': False, 'error': error or 'Bilinmeyen hata'}
-
-        soup = BeautifulSoup(response.content, 'html.parser')
-        html_text = response.text
-        domain = urlparse(normalized_url).netloc.lower()
-        session = requests.Session()
-        session.trust_env = False
-
-        # ============ ROUTER SİSTEMİ - v3.0 ============
-        # Domain'e göre handler seç
-        handler = get_site_handler(domain)
         site_specific_data = None
-        parser_used = handler
         parser_error = None
+        detected_platform = None
+        soup = None
+        html_text = None
+        session = None
 
-        # Handler'a göre özel parser çalıştır
-        try:
-            if handler == 'api_trendyol':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                site_specific_data = scrape_api_trendyol(normalized_url, session)
+        # BİLİNEN SİTE - Direkt handler çağır
+        if is_known_site:
+            try:
+                # Cloudflare kontrolü
+                use_cf = any(site in domain for site in cloudflare_sites)
+                timeout = 30 if 'ikea' in domain else 20
 
-            elif handler == 'shopify':
-                logger.info(f"Trying Shopify handler for {normalized_url}")
-                site_specific_data = scrape_shopify(normalized_url)
+                # Fetch - sadece özel handler'lar için
+                if handler_name in ['trendyol', 'hepsiburada', 'shopify', 'akinon']:
+                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
+                    if not response and was_mobile:
+                        response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
+                        if response:
+                            normalized_url = url
 
-            elif handler == 'akinon':
-                logger.info(f"Trying Akinon platform handler for {normalized_url}")
-                site_specific_data = scrape_enza_akinon(normalized_url, use_cloudscraper=False)
+                    if not response or response.status_code != 200:
+                        logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
+                        return {'success': False, 'error': error or 'Bilinmeyen hata'}
 
-            elif handler == 'nextjs':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                site_specific_data = parse_nextjs_product(normalized_url, soup, use_cloudscraper=False)
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    html_text = response.text
 
-            elif handler == 'woocommerce':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                site_specific_data = parse_woocommerce_product(normalized_url, soup, use_cloudscraper=False)
+                # Handler'a göre çağır
+                if handler_name == 'trendyol':
+                    session = requests.Session()
+                    session.trust_env = False
+                    site_specific_data = handler_func(normalized_url, session)
+                elif handler_name == 'hepsiburada':
+                    site_specific_data = handler_func(normalized_url, use_cloudscraper=True)
+                elif handler_name == 'karaca':
+                    # Karaca için fetch gerekli
+                    use_cf = True
+                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=20)
+                    if not response or response.status_code != 200:
+                        logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
+                        return {'success': False, 'error': error or 'Bilinmeyen hata'}
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    html_text = response.text
+                    site_specific_data = handler_func(normalized_url, soup, html_text, use_cloudscraper=True)
+                elif handler_name == 'ikea':
+                    # IKEA için fetch gerekli
+                    use_cf = True
+                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=30)
+                    if not response or response.status_code != 200:
+                        logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
+                        return {'success': False, 'error': error or 'Bilinmeyen hata'}
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    site_specific_data = handler_func(normalized_url, soup, use_cloudscraper=True)
+                elif handler_name == 'akinon':
+                    site_specific_data = handler_func(normalized_url, use_cloudscraper=False)
 
-            elif handler == 'ikea':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                site_specific_data = scrape_ikea(normalized_url, soup, use_cloudscraper=True)
+                logger.info(f"→ Used {handler_name} handler")
 
-            elif handler == 'jsonld':
-                # JSON-LD parser (Hepsiburada, Arçelik, Beko, etc.)
-                if 'hepsiburada' in domain:
-                    logger.info(f"Trying Hepsiburada JSON-LD for {normalized_url}")
-                    site_specific_data = scrape_hepsiburada(normalized_url, use_cloudscraper=True)
-                else:
-                    logger.info(f"Trying generic JSON-LD for {normalized_url}")
-                    # Generic fallback'te extract_json_ld zaten çağrılıyor
-                    site_specific_data = None
+            except Exception as e:
+                parser_error = f"{handler_name} handler error: {str(e)}"
+                logger.error(f"✗ {parser_error}")
+                import traceback
+                logger.debug(traceback.format_exc())
 
-            elif handler == 'datalayer':
-                # Site-specific dataLayer parsers
-                if 'karaca' in domain:
-                    logger.info(f"Trying Karaca dataLayer for {normalized_url}")
-                    site_specific_data = scrape_datalayer_karaca(normalized_url, soup, html_text, use_cloudscraper=True)
-                else:
-                    # Generic dataLayer (N11, Çiçeksepeti, MediaMarkt, Teknosa, Vatan)
-                    logger.info(f"Trying generic dataLayer for {normalized_url}")
-                    hidden_data = extract_hidden_json_data(soup, html_text)
-                    if hidden_data and (hidden_data.get('title') or hidden_data.get('price')):
-                        site_specific_data = hidden_data
+        # ============ AŞAMA 2: BİLİNMEYEN SİTELER - OTOMATIK PLATFORM TESPİTİ ============
+        else:
+            logger.info("⚡ Unknown site - starting automatic platform detection...")
 
-            elif handler == 'jsonld_datalayer':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                # Hybrid: JSON-LD + dataLayer (Samsung, Koçtaş)
-                # İki kaynak da generic fallback'te birleşiyor
-                site_specific_data = None
+            try:
+                # Fetch HTML
+                use_cf = any(site in domain for site in cloudflare_sites)
+                timeout = 30 if 'ikea' in domain else 20
+                response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
 
-            elif handler == 'meta_html':
-                logger.info(f"Trying {handler} for {normalized_url}")
-                # Meta tags + HTML fallback (Doğtaş, Mondi, Bauhaus)
-                site_specific_data = scrape_meta_html_fallback(soup, normalized_url)
+                # Mobil fallback
+                if not response and was_mobile:
+                    response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
+                    if response:
+                        normalized_url = url
 
-        except Exception as e:
-            parser_error = f"{handler} parser error: {str(e)}"
-            logger.error(parser_error)
+                if not response or response.status_code != 200:
+                    logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
+                    return {'success': False, 'error': error or 'Bilinmeyen hata'}
 
-        # Debug: Router sonuçları
-        import os
-        if os.environ.get('SCRAPER_DEBUG') == 'true':
-            print(f"\n{'─'*50}")
-            print(f"🔧 ROUTER DEBUG")
-            print(f"{'─'*50}")
-            print(f"Domain: {domain}")
-            print(f"Handler: {handler}")
-            print(f"Site-specific data: {'✅ Found' if site_specific_data else '❌ None'}")
-            if site_specific_data:
-                print(f"  • Title: {site_specific_data.get('title', 'N/A')[:50]}...")
-                print(f"  • Price: {site_specific_data.get('price', 'N/A')}")
-                print(f"  • Brand: {site_specific_data.get('brand', 'N/A')}")
-            if parser_error:
-                print(f"⚠️  Error: {parser_error}")
-            print(f"{'─'*50}\n")
+                soup = BeautifulSoup(response.content, 'html.parser')
+                html_text = response.text
+
+                # Platform tespit et
+                detected_platform, detection_reason = detect_ecommerce_platform(normalized_url, html_text, soup)
+                logger.info(f"✓ Platform detected: {detected_platform} ({detection_reason})")
+
+                # ============ AŞAMA 3: PLATFORM-HANDLER ROUTING ============
+                logger.info(f"→ Routing to {detected_platform} handler...")
+
+                try:
+                    if detected_platform == 'shopify':
+                        site_specific_data = scrape_shopify(normalized_url)
+
+                    elif detected_platform == 'akinon':
+                        site_specific_data = scrape_enza_akinon(normalized_url, use_cloudscraper=use_cf)
+
+                    elif detected_platform == 'jsonld':
+                        site_specific_data = scrape_jsonld_from_soup(soup, normalized_url)
+
+                    elif detected_platform == 'nextjs':
+                        site_specific_data = scrape_nextjs_from_soup(soup, normalized_url)
+
+                    elif detected_platform == 'datalayer':
+                        site_specific_data = scrape_datalayer_from_soup(soup, normalized_url, html_text)
+
+                    elif detected_platform == 'woocommerce':
+                        site_specific_data = scrape_woocommerce_from_soup(soup, normalized_url)
+
+                    elif detected_platform == 'meta_html':
+                        site_specific_data = scrape_meta_html_from_soup(soup, normalized_url)
+
+                    if site_specific_data:
+                        logger.info(f"✓ {detected_platform} handler succeeded")
+                    else:
+                        logger.warning(f"⚠ {detected_platform} handler returned None, will use fallback")
+
+                except Exception as e:
+                    parser_error = f"{detected_platform} handler error: {str(e)}"
+                    logger.error(f"✗ {parser_error}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
+
+            except Exception as e:
+                parser_error = f"Platform detection failed: {str(e)}"
+                logger.error(f"✗ {parser_error}")
+                import traceback
+                logger.debug(traceback.format_exc())
+
+        # ============ SOUP OLUŞTUR (Eğer henüz yoksa) ============
+        # Bazı handler'lar fetch yapmadığı için soup yoksa oluştur
+        if soup is None:
+            use_cf = any(site in domain for site in cloudflare_sites)
+            timeout = 30 if 'ikea' in domain else 20
+            response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
+
+            if not response and was_mobile:
+                response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
+                if response:
+                    normalized_url = url
+
+            if not response or response.status_code != 200:
+                logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
+                return {'success': False, 'error': error or 'Bilinmeyen hata'}
+
+            soup = BeautifulSoup(response.content, 'html.parser')
+            html_text = response.text
 
         # ============ VERİ ÇIKARMA (FALLBACK CHAIN) ============
         json_ld_data = extract_json_ld(soup)
@@ -2158,8 +2691,11 @@ def scrape_product(url):
         hidden_json_data = extract_hidden_json_data(soup, html_text) or {}
         html_data = extract_html_elements(soup, normalized_url, html_text)
 
+        # Handler bilgisi (logging için)
+        handler = handler_name if is_known_site else detected_platform
+        parser_used = handler
+
         # Birleştir (Öncelik: Site-Specific > JSON-LD > Hidden JSON > Meta > HTML)
-        # datalayer, jsonld, jsonld_datalayer, meta_html handler'ları generic parser kullanır
         special_data = site_specific_data or {}
 
         # Fallback chain tracking
