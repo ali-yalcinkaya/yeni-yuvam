@@ -2173,6 +2173,26 @@ def fetch_with_retry(url, max_retries=3, use_cloudscraper=False, timeout=30):
 
             response.raise_for_status()
 
+            # GZIP decode kontrolü ve düzeltme
+            content_encoding = response.headers.get('Content-Encoding', '')
+            # GZIP magic bytes: 0x1f 0x8b
+            is_gzipped = content_encoding == 'gzip' or (len(response.content) >= 2 and response.content[:2] == b'\x1f\x8b')
+
+            if is_gzipped:
+                # Eğer gzip'liyse ve decode edilmemişse, manuel decode et
+                try:
+                    import gzip
+                    decoded_content = gzip.decompress(response.content)
+
+                    # Response'u yeniden oluştur (decoded content ile)
+                    # requests.Response objesi immutable olduğu için _content kullanıyoruz
+                    response._content = decoded_content
+                    response.headers.pop('Content-Encoding', None)  # Encoding header'ı kaldır
+
+                    logger.debug(f"✓ GZIP decoded: {len(response.content)} bytes")
+                except Exception as e:
+                    logger.warning(f"⚠ GZIP decode attempt failed: {e}")
+
             # Encoding düzelt
             if response.encoding in ['ISO-8859-1', 'ISO-8859-9', None]:
                 response.encoding = 'utf-8'
