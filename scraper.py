@@ -967,7 +967,7 @@ def scrape_shopify(url):
 
         # Eğer response yok veya 404 dönerse, bu site Shopify değil
         if not response:
-            logger.warning(f"Failed to fetch Shopify JSON: {json_url}")
+            logger.warning(f"Failed to fetch Shopify JSON: {json_url} - {error}")
             return None
 
         if response.status_code == 404:
@@ -1935,6 +1935,105 @@ def extract_with_regex(soup, title='', existing_specs=None):
     return specs
 
 # ============================================
+# DEBUG UTILITIES
+# ============================================
+def save_debug_html(url, html_content, soup):
+    """
+    Debug için HTML'i dosyaya kaydet
+
+    Args:
+        url: Ürün URL'i
+        html_content: HTML içeriği
+        soup: BeautifulSoup objesi
+
+    Returns:
+        str: Kaydedilen dosya yolu
+    """
+    try:
+        from pathlib import Path
+        from datetime import datetime
+        import os
+
+        # Debug dizini oluştur
+        debug_dir = Path('debug_html')
+        debug_dir.mkdir(exist_ok=True)
+
+        # Dosya adı oluştur
+        domain = urlparse(url).netloc.replace('www.', '').replace('.', '_')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{domain}_{timestamp}.html"
+        filepath = debug_dir / filename
+
+        # HTML'i kaydet
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        logger.info(f"💾 HTML saved to: {filepath}")
+
+        # Platform tespit bilgilerini ayrı dosyaya yaz
+        info_file = debug_dir / f"{domain}_{timestamp}_info.txt"
+        with open(info_file, 'w', encoding='utf-8') as f:
+            f.write(f"URL: {url}\n")
+            f.write(f"Timestamp: {timestamp}\n\n")
+
+            f.write("="*50 + "\n")
+            f.write("PLATFORM DETECTION MARKERS\n")
+            f.write("="*50 + "\n\n")
+
+            # Shopify marker
+            f.write(f"[Shopify] /products/ in URL: {'/products/' in url}\n")
+
+            # Akinon marker
+            has_akinon = 'js-datalayer-group-item' in html_content or 'akinoncloud.com' in html_content
+            f.write(f"[Akinon] Marker found: {has_akinon}\n")
+
+            # JSON-LD count
+            jsonld_count = len(soup.find_all('script', type='application/ld+json'))
+            f.write(f"[JSON-LD] Script count: {jsonld_count}\n")
+
+            # Next.js
+            has_nextjs = soup.find('script', id='__NEXT_DATA__') is not None
+            f.write(f"[Next.js] __NEXT_DATA__ found: {has_nextjs}\n")
+
+            # dataLayer
+            has_datalayer = 'datalayer' in html_content.lower()
+            f.write(f"[dataLayer] GTM found: {has_datalayer}\n")
+
+            # WooCommerce
+            has_woo = 'woocommerce' in html_content.lower()
+            f.write(f"[WooCommerce] Marker found: {has_woo}\n")
+
+            f.write("\n" + "="*50 + "\n")
+            f.write("META TAGS\n")
+            f.write("="*50 + "\n\n")
+
+            for meta in soup.find_all('meta')[:20]:
+                prop = meta.get('property') or meta.get('name')
+                content = meta.get('content', '')[:100]
+                if prop:
+                    f.write(f"{prop}: {content}\n")
+
+        logger.info(f"📝 Debug info saved to: {info_file}")
+
+        print(f"\n{'='*60}")
+        print(f"💾 DEBUG FILES SAVED")
+        print(f"{'='*60}")
+        print(f"HTML: {filepath}")
+        print(f"Info: {info_file}")
+        print(f"\n💡 NEXT STEPS:")
+        print(f"1. Open {filepath} in browser")
+        print(f"2. Check {info_file} for platform markers")
+        print(f"3. Search HTML for product data (price, title, etc.)")
+        print(f"{'='*60}\n")
+
+        return str(filepath)
+
+    except Exception as e:
+        logger.error(f"Failed to save debug HTML: {e}")
+        return None
+
+
+# ============================================
 # 5. USER-AGENT ROTASYONU VE RETRY
 # ============================================
 def fetch_with_retry(url, max_retries=3, use_cloudscraper=False, timeout=30):
@@ -2502,16 +2601,16 @@ def scrape_product(url):
         wait_for_rate_limit(domain)
 
         # ============ AŞAMA 1: BİLİNEN SİTELER - HIZLI YÖNLENDİRME ============
-        # Bilinen siteler için domain → handler mapping
+        # Bilinen siteler için domain → (name, type) mapping
         KNOWN_SITES = {
-            'trendyol.com': ('trendyol', scrape_api_trendyol),
-            'hepsiburada.com': ('hepsiburada', scrape_hepsiburada),
-            'karaca.com': ('karaca', scrape_datalayer_karaca),
-            'ikea.com': ('ikea', scrape_ikea),
-            'enzahome.com': ('akinon', scrape_enza_akinon),
-            'alfemo.com': ('akinon', scrape_enza_akinon),
-            'istikbal.com': ('akinon', scrape_enza_akinon),
-            'bellona.com': ('akinon', scrape_enza_akinon),
+            'trendyol.com': ('trendyol', 'api'),
+            'hepsiburada.com': ('hepsiburada', 'jsonld'),
+            'karaca.com': ('karaca', 'datalayer'),
+            'ikea.com': ('ikea', 'ikea'),
+            'enzahome.com': ('enzahome', 'akinon'),
+            'alfemo.com': ('alfemo', 'akinon'),
+            'istikbal.com': ('istikbal', 'akinon'),
+            'bellona.com': ('bellona', 'akinon'),
         }
 
         # Cloudflare korumalı siteler
@@ -2521,14 +2620,14 @@ def scrape_product(url):
         # Domain kontrolü
         is_known_site = False
         handler_name = None
-        handler_func = None
+        handler_type = None
 
-        for site_domain, (name, func) in KNOWN_SITES.items():
+        for site_domain, (name, htype) in KNOWN_SITES.items():
             if site_domain in domain:
                 is_known_site = True
                 handler_name = name
-                handler_func = func
-                logger.info(f"✓ Known site detected: {handler_name}")
+                handler_type = htype
+                logger.info(f"✓ Known site detected: {handler_name} (type: {handler_type})")
                 break
 
         site_specific_data = None
@@ -2545,51 +2644,41 @@ def scrape_product(url):
                 use_cf = any(site in domain for site in cloudflare_sites)
                 timeout = 30 if 'ikea' in domain else 20
 
-                # Fetch - sadece özel handler'lar için
-                if handler_name in ['trendyol', 'hepsiburada', 'shopify', 'akinon']:
-                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=timeout)
-                    if not response and was_mobile:
-                        response, error = fetch_with_retry(url, use_cloudscraper=use_cf, timeout=timeout)
-                        if response:
-                            normalized_url = url
-
-                    if not response or response.status_code != 200:
-                        logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
-                        return {'success': False, 'error': error or 'Bilinmeyen hata'}
-
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    html_text = response.text
-
-                # Handler'a göre çağır
-                if handler_name == 'trendyol':
+                # Handler type'a göre çağır
+                if handler_type == 'api':
+                    # Trendyol API
                     session = requests.Session()
                     session.trust_env = False
-                    site_specific_data = handler_func(normalized_url, session)
-                elif handler_name == 'hepsiburada':
-                    site_specific_data = handler_func(normalized_url, use_cloudscraper=True)
-                elif handler_name == 'karaca':
-                    # Karaca için fetch gerekli
-                    use_cf = True
-                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=20)
+                    site_specific_data = scrape_api_trendyol(normalized_url, session)
+
+                elif handler_type == 'jsonld':
+                    # Hepsiburada JSON-LD
+                    site_specific_data = scrape_hepsiburada(normalized_url, use_cloudscraper=True)
+
+                elif handler_type == 'datalayer':
+                    # Karaca dataLayer
+                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=True, timeout=20)
                     if not response or response.status_code != 200:
                         logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
                         return {'success': False, 'error': error or 'Bilinmeyen hata'}
                     soup = BeautifulSoup(response.content, 'html.parser')
                     html_text = response.text
-                    site_specific_data = handler_func(normalized_url, soup, html_text, use_cloudscraper=True)
-                elif handler_name == 'ikea':
-                    # IKEA için fetch gerekli
-                    use_cf = True
-                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=use_cf, timeout=30)
+                    site_specific_data = scrape_datalayer_karaca(normalized_url, soup, html_text, use_cloudscraper=True)
+
+                elif handler_type == 'ikea':
+                    # IKEA özel parser
+                    response, error = fetch_with_retry(normalized_url, use_cloudscraper=True, timeout=30)
                     if not response or response.status_code != 200:
                         logger.error(f"✗ Failed to fetch {normalized_url}: {error}")
                         return {'success': False, 'error': error or 'Bilinmeyen hata'}
                     soup = BeautifulSoup(response.content, 'html.parser')
-                    site_specific_data = handler_func(normalized_url, soup, use_cloudscraper=True)
-                elif handler_name == 'akinon':
-                    site_specific_data = handler_func(normalized_url, use_cloudscraper=False)
+                    site_specific_data = scrape_ikea(normalized_url, soup, use_cloudscraper=True)
 
-                logger.info(f"→ Used {handler_name} handler")
+                elif handler_type == 'akinon':
+                    # Akinon platform (Enza, Alfemo, İstikbal, Bellona)
+                    site_specific_data = scrape_enza_akinon(normalized_url, use_cloudscraper=False)
+
+                logger.info(f"→ Used {handler_name} handler (type: {handler_type})")
 
             except Exception as e:
                 parser_error = f"{handler_name} handler error: {str(e)}"
@@ -2624,6 +2713,22 @@ def scrape_product(url):
                 detected_platform, detection_reason = detect_ecommerce_platform(normalized_url, html_text, soup)
                 logger.info(f"✓ Platform detected: {detected_platform} ({detection_reason})")
 
+                # DEBUG MODE: HTML kaydet
+                import os
+                if os.environ.get('SCRAPER_DEBUG') == 'true':
+                    save_debug_html(normalized_url, html_text, soup)
+
+                    # Detaylı platform bilgisi
+                    print(f"\n{'='*60}")
+                    print(f"🔍 PLATFORM DETECTION DEBUG")
+                    print(f"{'='*60}")
+                    print(f"URL: {normalized_url}")
+                    print(f"Domain: {domain}")
+                    print(f"Detected Platform: {detected_platform}")
+                    print(f"Detection Reason: {detection_reason}")
+                    print(f"Cloudscraper Used: {use_cf}")
+                    print(f"{'='*60}\n")
+
                 # ============ AŞAMA 3: PLATFORM-HANDLER ROUTING ============
                 logger.info(f"→ Routing to {detected_platform} handler...")
 
@@ -2653,6 +2758,42 @@ def scrape_product(url):
                         logger.info(f"✓ {detected_platform} handler succeeded")
                     else:
                         logger.warning(f"⚠ {detected_platform} handler returned None, will use fallback")
+
+                        # DEBUG MODE: Parser failure analysis
+                        import os
+                        import re
+                        if os.environ.get('SCRAPER_DEBUG') == 'true':
+                            print(f"\n{'='*60}")
+                            print(f"⚠️  PARSER FAILURE ANALYSIS")
+                            print(f"{'='*60}")
+                            print(f"Handler: {detected_platform}")
+                            print(f"Trying fallback chain...")
+
+                            # JSON-LD kontrol
+                            jsonld_scripts = soup.find_all('script', type='application/ld+json')
+                            print(f"\nJSON-LD scripts: {len(jsonld_scripts)}")
+                            for i, script in enumerate(jsonld_scripts[:3]):
+                                try:
+                                    import json
+                                    data = json.loads(script.string)
+                                    print(f"  Script {i+1} @type: {data.get('@type')}")
+                                except:
+                                    print(f"  Script {i+1}: Parse error")
+
+                            # dataLayer kontrol
+                            has_datalayer = 'datalayer' in html_text.lower()
+                            print(f"\ndataLayer found: {has_datalayer}")
+                            if has_datalayer:
+                                patterns = re.findall(r'dataLayer\.push\(', html_text)
+                                print(f"  dataLayer.push calls: {len(patterns)}")
+
+                            # Meta tags
+                            print(f"\nMeta tags:")
+                            og_title = soup.find('meta', property='og:title')
+                            print(f"  og:title: {og_title.get('content', 'N/A')[:50] if og_title else 'NOT FOUND'}")
+                            og_price = soup.find('meta', property='og:price:amount')
+                            print(f"  og:price:amount: {og_price.get('content', 'N/A') if og_price else 'NOT FOUND'}")
+                            print(f"{'='*60}\n")
 
                 except Exception as e:
                     parser_error = f"{detected_platform} handler error: {str(e)}"
@@ -2874,38 +3015,118 @@ def scrape_product(url):
 # ============================================
 # TEST
 # ============================================
+# ============================================
+# MAIN - CLI INTERFACE
+# ============================================
 if __name__ == '__main__':
-    # Her kategoriden test URL'leri - Router sisteminin tüm handler'larını test eder
-    test_urls = [
-        ('Trendyol (API)', 'https://www.trendyol.com/matt-notebook/a5-spiralli-suresiz-planlayici-ajanda-motivasyon-sayfali-potikare-p-797529053'),
-        ('Hepsiburada (dataLayer)', 'https://www.hepsiburada.com/mien-bambu-kapakli-12-adet-cam-baharatlik-seti-kavanoz-seti-ve-16-adet-etiket-hediyeli-p-HBCV00006Y57VM'),
-        ('Karaca (dataLayer)', 'https://www.karaca.com/urun/karaca-tea-break-cay-makinesi-inox-siyah'),
-        ('Enza Home (Shopify)', 'https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/'),
-        ('Normod (Shopify)', 'https://normod.com/products/klem-butter-blush-cagla-yesili-3-3-1-koltuk-takimi-kadife'),
-        ('Arçelik (JSON-LD)', 'https://www.arcelik.com.tr/9-kg-camasir-makinesi/9120-mp-og-camasir-makinesi'),
-        ('IKEA (IKEA parser)', 'https://www.ikea.com.tr/tr/urunler/mutfak-urunleri/mutfak-esyasi-ve-taksim-sistemleri/uppspretta-yagdanlik'),
-    ]
+    """
+    USAGE EXAMPLES:
+    ===============
 
+    # Normal scraping
+    python scraper.py --url "https://www.trendyol.com/product/..."
+
+    # Debug mode (detailed logging + HTML save)
+    python scraper.py --url "https://unknown-site.com/product/123" --debug
+
+    # Run all tests
+    python scraper.py --test
+
+    # Debug mode + tests
+    python scraper.py --test --debug
+    """
+    import argparse
+    import sys
     import os
-    os.environ['SCRAPER_DEBUG'] = 'true'  # Debug mode aktif
 
-    for site_name, url in test_urls:
+    parser = argparse.ArgumentParser(
+        description='Türk E-Ticaret Scraper v3.0 - Otomatik Platform Tespit Sistemi',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --url "https://www.trendyol.com/product/..."
+  %(prog)s --url "https://unknown-site.com/product/123" --debug
+  %(prog)s --test
+  %(prog)s --test --debug
+        """
+    )
+    parser.add_argument('--url', type=str, help='Scrape edilecek ürün URL\'i')
+    parser.add_argument('--debug', action='store_true', help='Debug mode - detaylı log ve HTML kaydet')
+    parser.add_argument('--test', action='store_true', help='Tüm test URL\'lerini çalıştır')
+
+    args = parser.parse_args()
+
+    # Debug mode ayarla
+    if args.debug:
+        os.environ['SCRAPER_DEBUG'] = 'true'
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        print(f"\n{'='*60}")
+        print(f"🐛 DEBUG MODE ENABLED")
+        print(f"{'='*60}\n")
+
+    # Test mode
+    if args.test:
+        test_urls = [
+            ('Trendyol (API)', 'https://www.trendyol.com/matt-notebook/a5-spiralli-suresiz-planlayici-ajanda-motivasyon-sayfali-potikare-p-797529053'),
+            ('Hepsiburada (JSON-LD)', 'https://www.hepsiburada.com/mien-bambu-kapakli-12-adet-cam-baharatlik-seti-kavanoz-seti-ve-16-adet-etiket-hediyeli-p-HBCV00006Y57VM'),
+            ('Karaca (dataLayer)', 'https://www.karaca.com/urun/karaca-tea-break-cay-makinesi-inox-siyah'),
+            ('Enza Home (Akinon)', 'https://www.enzahome.com.tr/aldea-koltuk-takimi-3-1-20260107/'),
+            ('Normod (Shopify)', 'https://normod.com/products/klem-butter-blush-cagla-yesili-3-3-1-koltuk-takimi-kadife'),
+            ('Arçelik (JSON-LD)', 'https://www.arcelik.com.tr/9-kg-camasir-makinesi/9120-mp-og-camasir-makinesi'),
+            ('IKEA', 'https://www.ikea.com.tr/tr/urunler/mutfak-urunleri/mutfak-esyasi-ve-taksim-sistemleri/uppspretta-yagdanlik'),
+        ]
+
+        passed = 0
+        failed = 0
+
+        for site_name, url in test_urls:
+            print(f"\n{'='*80}")
+            print(f"🧪 TEST: {site_name}")
+            print(f"🔗 URL: {url}")
+            print('='*80)
+
+            try:
+                result = scrape_product(url)
+
+                if result['success']:
+                    data = result['data']
+                    print(f"✓ Başlık: {data['title'][:60]}...")
+                    print(f"✓ Fiyat: {data['price']} TL")
+                    print(f"✓ Marka: {data['brand']}")
+                    print(f"✓ Kategori: {data['kategori_tahmini']} > {data['alt_kategori_tahmini']}")
+                    print(f"✓ Görsel: {data['image_url'][:80]}..." if data['image_url'] else "✓ Görsel: N/A")
+                    if data['specs']:
+                        print(f"✓ Teknik Özellikler ({len(data['specs'])} adet):")
+                        for k, v in list(data['specs'].items())[:5]:
+                            print(f"    - {k}: {v}")
+                    passed += 1
+                else:
+                    print(f"✗ Hata: {result['error']}")
+                    failed += 1
+            except Exception as e:
+                print(f"✗ Exception: {e}")
+                failed += 1
+
         print(f"\n{'='*80}")
-        print(f"🧪 TEST: {site_name}")
-        print(f"🔗 URL: {url}")
-        print('='*80)
+        print(f"📊 TEST RESULTS")
+        print(f"{'='*80}")
+        print(f"✓ Passed: {passed}/{len(test_urls)}")
+        print(f"✗ Failed: {failed}/{len(test_urls)}")
+        print(f"{'='*80}\n")
 
-        result = scrape_product(url)
+        sys.exit(0 if failed == 0 else 1)
+
+    # Tek URL scrape
+    if args.url:
+        result = scrape_product(args.url)
 
         if result['success']:
-            data = result['data']
-            print(f"✓ Başlık: {data['title'][:60]}...")
-            print(f"✓ Fiyat: {data['price']} TL")
-            print(f"✓ Marka: {data['brand']}")
-            print(f"✓ Kategori: {data['kategori_tahmini']} > {data['alt_kategori_tahmini']}")
-            print(f"✓ Görsel: {data['image_url'][:80]}...")
-            print(f"✓ Teknik Özellikler ({len(data['specs'])} adet):")
-            for k, v in list(data['specs'].items())[:5]:
-                print(f"    - {k}: {v}")
+            import json
+            print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
             print(f"✗ Hata: {result['error']}")
+            sys.exit(1)
+    else:
+        parser.print_help()
+        sys.exit(0)
