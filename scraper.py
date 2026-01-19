@@ -975,10 +975,97 @@ def scrape_shopify(url):
             return None
 
         if response.status_code == 200:
-            return parse_shopify_product(response.json())
+            try:
+                json_data = response.json()
+
+                # Debug mode: JSON'u logla
+                import os
+                if os.environ.get('SCRAPER_DEBUG') == 'true':
+                    print(f"\n{'='*60}")
+                    print(f"📦 SHOPIFY JSON RESPONSE")
+                    print(f"{'='*60}")
+                    print(f"Response length: {len(response.text)} chars")
+                    print(f"Content-Type: {response.headers.get('Content-Type', 'N/A')}")
+
+                    # İlk 500 karakter
+                    preview = response.text[:500]
+                    print(f"\nFirst 500 chars:")
+                    print(preview)
+
+                    if json_data:
+                        print(f"\nJSON keys: {list(json_data.keys())}")
+                    print(f"{'='*60}\n")
+
+                return parse_shopify_product(json_data)
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Shopify JSON parse error: {e}")
+
+                # Debug mode: Response'u kaydet
+                import os
+                if os.environ.get('SCRAPER_DEBUG') == 'true':
+                    print(f"\n{'='*60}")
+                    print(f"❌ SHOPIFY JSON PARSE FAILED")
+                    print(f"{'='*60}")
+                    print(f"Error: {e}")
+                    print(f"Content-Type: {response.headers.get('Content-Type', 'N/A')}")
+                    print(f"Response length: {len(response.text)} chars")
+                    print(f"\nFirst 1000 chars of response:")
+                    print(response.text[:1000])
+                    print(f"{'='*60}\n")
+
+                    # HTML olarak kaydet
+                    from pathlib import Path
+                    from datetime import datetime
+                    from urllib.parse import urlparse
+
+                    debug_dir = Path('debug_html')
+                    debug_dir.mkdir(exist_ok=True)
+
+                    domain = urlparse(url).netloc.replace('www.', '').replace('.', '_')
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    error_file = debug_dir / f"{domain}_shopify_error_{timestamp}.txt"
+
+                    with open(error_file, 'w', encoding='utf-8') as f:
+                        f.write(f"URL: {json_url}\n")
+                        f.write(f"Error: {e}\n")
+                        f.write(f"Content-Type: {response.headers.get('Content-Type', 'N/A')}\n")
+                        f.write(f"Status: {response.status_code}\n\n")
+                        f.write("="*60 + "\n")
+                        f.write("RESPONSE CONTENT\n")
+                        f.write("="*60 + "\n")
+                        f.write(response.text)
+
+                    print(f"💾 Shopify error response saved to: {error_file}\n")
+
+                return None
 
     except Exception as e:
         logger.error(f"Shopify scrape failed for {url}: {e}")
+
+        # Son çare: HTML'den parse dene (Shopify bazen JSON endpoint'i olmayabilir)
+        try:
+            logger.info("Trying HTML fallback for Shopify...")
+            response, error = fetch_with_retry(url, timeout=20, use_cloudscraper=False)
+            if response and response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+
+                # Shopify HTML'de JSON var mı kontrol et
+                for script in soup.find_all('script', type='application/json'):
+                    script_id = script.get('id', '')
+                    if 'product' in script_id.lower() or 'shopify' in script_id.lower():
+                        try:
+                            data = json.loads(script.string)
+                            if 'product' in data:
+                                return parse_shopify_product({'product': data['product']})
+                        except:
+                            continue
+
+                # Generic fallback
+                return scrape_meta_html_from_soup(soup, url)
+        except:
+            pass
+
     return None
 
 
@@ -1322,6 +1409,7 @@ def extract_hidden_json_data(soup, html_text):
         'title': '',
         'price': 0,
         'brand': '',
+        'image_url': '',  # EKLE: KeyError önleme
         'specs': {}
     }
 
@@ -2087,6 +2175,13 @@ def fetch_with_retry(url, max_retries=3, use_cloudscraper=False, timeout=30):
 
             # Encoding düzelt
             if response.encoding in ['ISO-8859-1', 'ISO-8859-9', None]:
+                response.encoding = 'utf-8'
+            elif response.encoding == 'windows-1254':
+                response.encoding = 'utf-8'
+
+            # Eğer content-type JSON ise encoding'i force et
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/json' in content_type and response.encoding != 'utf-8':
                 response.encoding = 'utf-8'
 
             return response, None
